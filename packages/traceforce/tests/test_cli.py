@@ -27,6 +27,7 @@ def test_parser_defaults_to_current_workspace():
     args = build_parser().parse_args([])
     assert args.workspace == Path(".")
     assert args.assume_yes is False
+    assert args.max_iterations == 30
 
 
 def test_parser_supports_product_options():

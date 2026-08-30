@@ -253,7 +253,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="跳过 bash/write/edit 确认（仅在信任工作区时使用）",
     )
-    parser.add_argument("--max-iterations", type=int, default=None)
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=30,
+        help="限制一次任务的 Agent 迭代次数，默认 30",
+    )
     parser.add_argument("--version", action="version", version=VERSION)
     return parser
 

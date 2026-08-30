@@ -56,8 +56,9 @@ async def test_read_offset_beyond_end(tmp_path):
     read = make_read_tool(tmp_path)
     (tmp_path / "a.txt").write_text("line1\nline2", encoding="utf-8")
     result = await read.execute({"path": "a.txt", "offset": 100})
-    assert "Offset 100 is beyond end of file" in result.data
-    assert "has only 2 lines total" in result.data
+    assert result.ok is False
+    assert "Offset 100 is beyond end of file" in (result.error or "")
+    assert "has only 2 lines total" in (result.error or "")
 
 
 @pytest.mark.anyio
@@ -65,7 +66,8 @@ async def test_read_escape(tmp_path):
     """路径逃逸 → 'escapes workspace'（#1）。"""
     read = make_read_tool(tmp_path)
     result = await read.execute({"path": "../secret.txt"})
-    assert "escapes workspace" in result.data
+    assert result.ok is False
+    assert "escapes workspace" in (result.error or "")
 
 
 @pytest.mark.anyio
@@ -73,7 +75,8 @@ async def test_read_missing(tmp_path):
     """不存在文件 → 'does not exist'。"""
     read = make_read_tool(tmp_path)
     result = await read.execute({"path": "nope.txt"})
-    assert "does not exist" in result.data
+    assert result.ok is False
+    assert "does not exist" in (result.error or "")
 
 
 @pytest.mark.anyio
@@ -85,7 +88,7 @@ async def test_write_creates_and_overwrites(tmp_path):
     assert (tmp_path / "sub" / "dir" / "a.txt").read_text(encoding="utf-8") == "hello"
     await write.execute({"path": "sub/dir/a.txt", "content": "world"})
     assert (tmp_path / "sub" / "dir" / "a.txt").read_text(encoding="utf-8") == "world"
-    assert write.is_parallel_safe is True
+    assert write.is_parallel_safe is False
 
 
 @pytest.mark.anyio
@@ -98,7 +101,7 @@ async def test_edit_replaces_once(tmp_path):
     )
     assert "Edited a.txt" in result.data
     assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "hello earth hello"
-    assert edit.is_parallel_safe is True
+    assert edit.is_parallel_safe is False
 
 
 @pytest.mark.anyio
@@ -107,8 +110,9 @@ async def test_edit_text_not_found(tmp_path):
     edit = make_edit_tool(tmp_path)
     (tmp_path / "a.txt").write_text("line1\nline2", encoding="utf-8")
     result = await edit.execute({"path": "a.txt", "old_text": "nope", "new_text": "x"})
-    assert "Text not found in a.txt" in result.data
-    assert "file has 2 lines total" in result.data
+    assert result.ok is False
+    assert "Text not found in a.txt" in (result.error or "")
+    assert "file has 2 lines total" in (result.error or "")
 
 
 @pytest.mark.anyio
@@ -119,8 +123,9 @@ async def test_edit_multiple_matches(tmp_path):
     result = await edit.execute(
         {"path": "a.txt", "old_text": "dup", "new_text": "unique"}
     )
-    assert "old_text matched 2 locations" in result.data
-    assert "Please provide more surrounding context lines" in result.data
+    assert result.ok is False
+    assert "old_text matched 2 locations" in (result.error or "")
+    assert "Please provide more surrounding context lines" in (result.error or "")
 
 
 @pytest.mark.anyio
@@ -162,7 +167,9 @@ async def test_bash_dangerous(tmp_path):
     """危险命令 → blocked（#6）。"""
     bash = make_bash_tool(tmp_path)
     result = await bash.execute({"command": "sudo rm -rf /"})
-    assert result.data == "Error: Dangerous command blocked"
+    assert result.ok is False
+    assert result.error == "Dangerous command blocked"
+    assert result.serialize() == "Dangerous command blocked"
 
 
 @pytest.mark.anyio
@@ -178,6 +185,7 @@ async def test_bash_timeout_captures_partial_output(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     result = await bash.execute({"command": f"{sys.executable} _sleep.py"})
-    assert "Timeout (1s)" in result.data
-    assert "Output before timeout" in result.data
-    assert "starting step 1..." in result.data
+    assert result.ok is False
+    assert "Timeout (1s)" in (result.error or "")
+    assert "Output before timeout" in (result.error or "")
+    assert "starting step 1..." in (result.error or "")

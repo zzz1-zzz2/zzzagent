@@ -39,7 +39,39 @@ async def test_tool_async_and_sync_functions():
     assert res2.data == 20
 
 
-# ---------- 装饰期：schema 生成（规格 §7 #1–#8） ----------
+@pytest.mark.anyio
+async def test_tool_async_timeout_returns_structured_error():
+    """async 工具超过 timeout → ToolResult(ok=False)，不把异常抛给调用方。"""
+    import asyncio
+
+    @tool(timeout=0.01)
+    async def slow() -> str:
+        await asyncio.sleep(1)
+        return "done"
+
+    result = await slow.execute({})
+    assert result.ok is False
+    assert result.data is None
+    assert "slow" in (result.error or "")
+    assert "timed out" in (result.error or "")
+
+
+@pytest.mark.anyio
+async def test_tool_sync_timeout_returns_structured_error():
+    """同步工具超过 timeout → 返回结构化错误（线程本身由 Python 管理）。"""
+    import time
+
+    @tool(timeout=0.01)
+    def slow() -> str:
+        time.sleep(1)
+        return "done"
+
+    result = await slow.execute({})
+    assert result.ok is False
+    assert "slow" in (result.error or "")
+    assert "timed out" in (result.error or "")
+
+
 
 
 def test_schema_basic_types():

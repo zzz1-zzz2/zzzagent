@@ -90,6 +90,12 @@ def _agent(llm, *, tools=(multiply,), session=None, **kwargs) -> Agent:
     return Agent(llm=llm, tools=list(tools), session=session, **kwargs)
 
 
+def test_agent_default_max_iterations():
+    """未显式配置时启用资源型迭代上限。"""
+    agent = _agent(FakeLLM([]))
+    assert agent.max_iterations == 30
+
+
 @pytest.mark.anyio
 async def test_direct_answer():
     """直接回答路径：纯 content → 一轮结束返回文本（#2）。"""

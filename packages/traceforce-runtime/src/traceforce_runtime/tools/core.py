@@ -126,9 +126,18 @@ class Tool:
 
         try:
             if self.is_async:
-                result = await async_func_call()
+                execution = async_func_call()
             else:
-                result = await asyncio.to_thread(func_call)
+                execution = asyncio.to_thread(func_call)
+            if self.timeout is not None:
+                result = await asyncio.wait_for(execution, timeout=self.timeout)
+            else:
+                result = await execution
+        except TimeoutError:
+            return ToolResult(
+                ok=False,
+                error=f"Tool '{self.name}' timed out after {self.timeout:g} seconds",
+            )
         except Exception as exc:  # 工具错误 → 消息，喂回模型
             return ToolResult(
                 ok=False, error=f"Error executing tool '{self.name}': {exc}"

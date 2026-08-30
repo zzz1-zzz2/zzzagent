@@ -57,7 +57,7 @@ class Agent:
         tools: list[Tool],
         session: Session,
         system_prompt: str | None = None,
-        max_iterations: int | None = None,
+        max_iterations: int | None = 30,
         context_budget: int | None = None,
         keep_recent_tokens: int | None = None,
         skill_dirs: Sequence[str | Path] | None = None,
@@ -75,6 +75,8 @@ class Agent:
         session 必填：run() 内每条消息落盘；构造时从 session 当前路径恢复纯对话，
         并用 system_prompt + skill 清单 + subagent 清单拼 system（消息首条）。
         context_budget 为 context 预算：None → 用 ContextManager 默认（100k）；显式传 → 覆盖。
+        max_iterations 默认 30：模型无 tool call 时自然结束；持续调用工具时以资源上限兜底。
+        显式传入 None 可禁用该资源上限（底层 API 高级用法）。
         context 默认启用（每次 llm.chat 前 prepare 压缩视图）。
         skill_dirs 为 skill 机制来源：None → 探测 <cwd>/.agents/skills（不存在则空）；
         [] → 显式禁用；非空 list → 只扫这些目录。构造 skill_manager 追加清单块进

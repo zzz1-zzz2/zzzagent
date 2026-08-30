@@ -3,7 +3,7 @@
 > 面向真实软件工程任务的可验证编程智能体
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-293%20passed-2ea44f)](#测试与验收)
+[![Tests](https://img.shields.io/badge/tests-296%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
 TraceForce 是一个从零实现的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
@@ -325,7 +325,7 @@ uv build
 - workspace 路径安全和文件修改；
 - CLI presenter、权限确认和 MCP 集成。
 
-当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 225 项、`traceforce` 32 项，共 293 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
+当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 32 项，共 296 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
 
 ---
 

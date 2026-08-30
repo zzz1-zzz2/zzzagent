@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from subprocess import PIPE, Popen, TimeoutExpired
 
-from traceforce_runtime.tools import Tool  # pyright: ignore[reportMissingImports]
+from traceforce_runtime.tools import Tool, ToolResult  # pyright: ignore[reportMissingImports]
 
 from traceforce.mutation_queue import FileMutationQueue
 
@@ -26,14 +26,16 @@ def make_read_tool(root: str | Path) -> Tool:
     """read(path, limit=None, offset=None)：精细化读文件（附带行号统计与越界提示）。"""
     root = Path(root).resolve()
 
-    def read(path: str, limit: int | None = None, offset: int | None = None) -> str:
+    def read(path: str, limit: int | None = None, offset: int | None = None) -> ToolResult:
         """Read file contents with line limits and offset. Use for large files."""
         try:
             fp = _safe_path(root, path)
             if not fp.exists():
-                return f"Error: File '{path}' does not exist."
+                return ToolResult(ok=False, error=f"File '{path}' does not exist.")
             if fp.is_dir():
-                return f"Error: '{path}' is a directory, not a regular file."
+                return ToolResult(
+                    ok=False, error=f"'{path}' is a directory, not a regular file."
+                )
 
             lines = fp.read_text(encoding="utf-8", errors="replace").splitlines()
             total_lines = len(lines)
@@ -41,7 +43,13 @@ def make_read_tool(root: str | Path) -> Tool:
             start_idx = 0
             if offset is not None:
                 if offset > total_lines:
-                    return f"Error: Offset {offset} is beyond end of file ('{path}' has only {total_lines} lines total)."
+                    return ToolResult(
+                        ok=False,
+                        error=(
+                            f"Offset {offset} is beyond end of file ('{path}' "
+                            f"has only {total_lines} lines total)."
+                        ),
+                    )
                 start_idx = max(0, offset - 1)
 
             selected_lines = lines[start_idx:]
@@ -51,9 +59,9 @@ def make_read_tool(root: str | Path) -> Tool:
                     f"... ({remaining} more lines, {total_lines} lines total)"
                 ]
 
-            return "\n".join(selected_lines)[:50000]
+            return ToolResult(ok=True, data="\n".join(selected_lines)[:50000])
         except Exception as e:
-            return f"Error: {e}"
+            return ToolResult(ok=False, error=f"Error: {e}")
 
     return Tool(func=read, name="read", is_parallel_safe=True)
 
@@ -65,7 +73,7 @@ def make_write_tool(
     root = Path(root).resolve()
     queue = mutation_queue or FileMutationQueue()
 
-    async def write(path: str, content: str) -> str:
+    async def write(path: str, content: str) -> ToolResult:
         """Write content to file. Creates/overwrites the file safely."""
         try:
             fp = _safe_path(root, path)
@@ -74,11 +82,14 @@ def make_write_tool(
                 fp.parent.mkdir(parents=True, exist_ok=True)
                 fp.write_text(content, encoding="utf-8")
                 line_count = len(content.splitlines())
-                return f"Wrote {len(content)} bytes ({line_count} lines) to {path}"
+                return ToolResult(
+                    ok=True,
+                    data=f"Wrote {len(content)} bytes ({line_count} lines) to {path}",
+                )
         except Exception as e:
-            return f"Error writing to '{path}': {e}"
+            return ToolResult(ok=False, error=f"Error writing to '{path}': {e}")
 
-    return Tool(func=write, name="write", is_parallel_safe=True)
+    return Tool(func=write, name="write", is_parallel_safe=False)
 
 
 def make_edit_tool(
@@ -88,14 +99,16 @@ def make_edit_tool(
     root = Path(root).resolve()
     queue = mutation_queue or FileMutationQueue()
 
-    async def edit(path: str, old_text: str, new_text: str) -> str:
+    async def edit(path: str, old_text: str, new_text: str) -> ToolResult:
         """Replace exact text in file (first unique occurrence only)."""
         try:
             fp = _safe_path(root, path)
             if not fp.exists():
-                return f"Error: File '{path}' does not exist."
+                return ToolResult(ok=False, error=f"File '{path}' does not exist.")
             if fp.is_dir():
-                return f"Error: '{path}' is a directory, not a regular file."
+                return ToolResult(
+                    ok=False, error=f"'{path}' is a directory, not a regular file."
+                )
 
             lock = await queue.get_lock(fp)
             async with lock:
@@ -104,34 +117,43 @@ def make_edit_tool(
                 total_lines = len(content.splitlines())
 
                 if match_count == 0:
-                    return (
-                        f"Error: Text not found in {path} (file has {total_lines} lines total). "
-                        f"Tip: Check exact whitespace, indentation, and newlines, or call read('{path}') first."
+                    return ToolResult(
+                        ok=False,
+                        error=(
+                            f"Text not found in {path} (file has {total_lines} lines total). "
+                            "Tip: Check exact whitespace, indentation, and newlines, "
+                            f"or call read('{path}') first."
+                        ),
                     )
 
                 if match_count > 1:
-                    return (
-                        f"Error: Could not edit '{path}': old_text matched {match_count} locations. "
-                        f"Please provide more surrounding context lines to ensure a unique match."
+                    return ToolResult(
+                        ok=False,
+                        error=(
+                            f"Could not edit '{path}': old_text matched {match_count} locations. "
+                            "Please provide more surrounding context lines to ensure a unique match."
+                        ),
                     )
 
                 new_content = content.replace(old_text, new_text, 1)
                 fp.write_text(new_content, encoding="utf-8")
-                return f"Edited {path} successfully (1 replacement made)"
+                return ToolResult(
+                    ok=True, data=f"Edited {path} successfully (1 replacement made)"
+                )
         except Exception as e:
-            return f"Error editing '{path}': {e}"
+            return ToolResult(ok=False, error=f"Error editing '{path}': {e}")
 
-    return Tool(func=edit, name="edit", is_parallel_safe=True)
+    return Tool(func=edit, name="edit", is_parallel_safe=False)
 
 
 def make_bash_tool(root: str | Path) -> Tool:
     """bash(command)：在 root 下执行 shell，危险命令黑名单 + 超时自动捕获已输出日志。"""
     root = Path(root).resolve()
 
-    def bash(command: str) -> str:
+    def bash(command: str) -> ToolResult:
         """Run a shell command in the workspace root."""
         if any(d in command for d in _DANGEROUS):
-            return "Error: Dangerous command blocked"
+            return ToolResult(ok=False, error="Dangerous command blocked")
         try:
             cmd_args = (
                 ["cmd.exe", "/c", command]
@@ -148,7 +170,7 @@ def make_bash_tool(root: str | Path) -> Tool:
             try:
                 stdout, stderr = proc.communicate(timeout=_TIMEOUT_SECONDS)
                 out = (stdout + stderr).strip()
-                return out[:50000] if out else "(no output)"
+                return ToolResult(ok=True, data=out[:50000] if out else "(no output)")
             except TimeoutExpired:
                 proc.kill()
                 partial_out, partial_err = proc.communicate()
@@ -158,14 +180,18 @@ def make_bash_tool(root: str | Path) -> Tool:
                     if captured
                     else "(no output captured before timeout)"
                 )
-                return (
-                    f"Error: Timeout ({_TIMEOUT_SECONDS}s) for command '{command}'.\n"
-                    f"=== Output before timeout ===\n"
-                    f"{partial_text}\n"
-                    f"=== End of output ===\n"
-                    f"Tip: The command may be waiting for interactive stdin. Pass non-interactive flags (e.g. -y) or check for long-running loops."
+                return ToolResult(
+                    ok=False,
+                    error=(
+                        f"Timeout ({_TIMEOUT_SECONDS}s) for command '{command}'.\n"
+                        f"=== Output before timeout ===\n"
+                        f"{partial_text}\n"
+                        f"=== End of output ===\n"
+                        "Tip: The command may be waiting for interactive stdin. "
+                        "Pass non-interactive flags (e.g. -y) or check for long-running loops."
+                    ),
                 )
         except OSError as e:
-            return f"Error: {e}"
+            return ToolResult(ok=False, error=f"Error: {e}")
 
     return Tool(func=bash, name="bash", is_parallel_safe=False)
