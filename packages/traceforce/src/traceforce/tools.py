@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
+import signal
 from pathlib import Path
-from subprocess import PIPE, Popen, TimeoutExpired
+from subprocess import DEVNULL, PIPE
 
 from traceforce_runtime.tools import Tool, ToolResult  # pyright: ignore[reportMissingImports]
 
@@ -12,6 +15,17 @@ from traceforce.mutation_queue import FileMutationQueue
 
 _TIMEOUT_SECONDS = 120
 _DANGEROUS = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
+_NON_INTERACTIVE_ENV = {
+    "CI": "1",
+    "DEBIAN_FRONTEND": "noninteractive",
+    "GIT_TERMINAL_PROMPT": "0",
+    "PIP_NO_INPUT": "1",
+    "npm_config_yes": "true",
+    "PAGER": "cat",
+    "GIT_PAGER": "cat",
+    "EDITOR": "true",
+    "VISUAL": "true",
+}
 
 
 def _safe_path(root: Path, p: str) -> Path:
@@ -146,35 +160,99 @@ def make_edit_tool(
     return Tool(func=edit, name="edit", is_parallel_safe=False)
 
 
+def _decode_output(stdout: bytes | None, stderr: bytes | None) -> str:
+    return ((stdout or b"") + (stderr or b"")).decode("utf-8", errors="replace").strip()
+
+
+async def _read_stream(stream: asyncio.StreamReader | None) -> bytes:
+    """Drain one subprocess pipe independently of process wait/cancellation."""
+    if stream is None:
+        return b""
+    return await stream.read()
+
+
+async def _terminate_process(proc: asyncio.subprocess.Process) -> None:
+    """Terminate the shell and its descendants, then wait for the shell."""
+    if os.name == "nt":
+        with contextlib.suppress(OSError):
+            proc.terminate()
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(proc.wait(), timeout=2)
+        if proc.returncode is None:
+            with contextlib.suppress(OSError):
+                proc.kill()
+    else:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGTERM)
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(proc.wait(), timeout=2)
+        # The shell may have exited while a descendant remains in the group.
+        # Always attempt the escalation so those descendants cannot hold pipes.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+    await proc.wait()
+
+
+async def _finish_streams(
+    stream_tasks: tuple[asyncio.Task[bytes], asyncio.Task[bytes]],
+) -> tuple[bytes, bytes]:
+    """Collect pipe readers, bounding cleanup for a misbehaving descendant."""
+    try:
+        return await asyncio.wait_for(asyncio.gather(*stream_tasks), timeout=2)
+    except asyncio.TimeoutError:
+        for task in stream_tasks:
+            task.cancel()
+        await asyncio.gather(*stream_tasks, return_exceptions=True)
+        return tuple(
+            task.result()
+            if task.done() and not task.cancelled() and task.exception() is None
+            else b""
+            for task in stream_tasks
+        )  # type: ignore[return-value]
+
+
 def make_bash_tool(root: str | Path) -> Tool:
-    """bash(command)：在 root 下执行 shell，危险命令黑名单 + 超时自动捕获已输出日志。"""
+    """bash(command)：非交互 shell，禁止继承 stdin，并支持进程组清理。"""
     root = Path(root).resolve()
 
-    def bash(command: str) -> ToolResult:
-        """Run a shell command in the workspace root."""
+    async def bash(command: str) -> ToolResult:
+        """Run a non-interactive shell command in the workspace root."""
         if any(d in command for d in _DANGEROUS):
             return ToolResult(ok=False, error="Dangerous command blocked")
-        try:
-            cmd_args = (
-                ["cmd.exe", "/c", command]
-                if os.name == "nt"
-                else ["/bin/sh", "-c", command]
+
+        cmd_args = (
+            ["cmd.exe", "/c", command]
+            if os.name == "nt"
+            else ["/bin/sh", "-c", command]
+        )
+        env = os.environ.copy()
+        env.update(_NON_INTERACTIVE_ENV)
+        kwargs: dict[str, object] = {
+            "cwd": root,
+            "stdin": DEVNULL,
+            "stdout": PIPE,
+            "stderr": PIPE,
+            "env": env,
+        }
+        if os.name != "nt":
+            kwargs["start_new_session"] = True
+        else:
+            kwargs["creationflags"] = getattr(
+                __import__("subprocess"), "CREATE_NEW_PROCESS_GROUP", 0
             )
-            proc = Popen(
-                cmd_args,
-                cwd=root,
-                stdout=PIPE,
-                stderr=PIPE,
-                text=True,
+
+        try:
+            proc = await asyncio.create_subprocess_exec(*cmd_args, **kwargs)
+            stream_tasks = (
+                asyncio.create_task(_read_stream(proc.stdout)),
+                asyncio.create_task(_read_stream(proc.stderr)),
             )
             try:
-                stdout, stderr = proc.communicate(timeout=_TIMEOUT_SECONDS)
-                out = (stdout + stderr).strip()
-                return ToolResult(ok=True, data=out[:50000] if out else "(no output)")
-            except TimeoutExpired:
-                proc.kill()
-                partial_out, partial_err = proc.communicate()
-                captured = ((partial_out or "") + (partial_err or "")).strip()
+                await asyncio.wait_for(proc.wait(), timeout=_TIMEOUT_SECONDS)
+            except asyncio.TimeoutError:
+                await _terminate_process(proc)
+                stdout, stderr = await _finish_streams(stream_tasks)
+                captured = _decode_output(stdout, stderr)
                 partial_text = (
                     captured[-2000:]
                     if captured
@@ -184,14 +262,29 @@ def make_bash_tool(root: str | Path) -> Tool:
                     ok=False,
                     error=(
                         f"Timeout ({_TIMEOUT_SECONDS}s) for command '{command}'.\n"
-                        f"=== Output before timeout ===\n"
-                        f"{partial_text}\n"
-                        f"=== End of output ===\n"
-                        "Tip: The command may be waiting for interactive stdin. "
-                        "Pass non-interactive flags (e.g. -y) or check for long-running loops."
+                        f"=== Output before timeout ===\n{partial_text}\n"
+                        "=== End of output ===\n"
+                        "Tip: Use non-interactive flags (e.g. -y/--no-input) for commands that support them."
                     ),
                 )
-        except OSError as e:
-            return ToolResult(ok=False, error=f"Error: {e}")
+            except asyncio.CancelledError:
+                await _terminate_process(proc)
+                await _finish_streams(stream_tasks)
+                raise
+            else:
+                stdout, stderr = await _finish_streams(stream_tasks)
+
+            output = _decode_output(stdout, stderr)
+            if proc.returncode:
+                return ToolResult(
+                    ok=False,
+                    error=(
+                        f"Command exited with status {proc.returncode}: '{command}'\n"
+                        f"{output or '(no output)'}"
+                    ),
+                )
+            return ToolResult(ok=True, data=output[:50000] if output else "(no output)")
+        except OSError as exc:
+            return ToolResult(ok=False, error=f"Error: {exc}")
 
     return Tool(func=bash, name="bash", is_parallel_safe=False)

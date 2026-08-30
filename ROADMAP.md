@@ -15,7 +15,7 @@ TraceForce 当前版本已经是可运行的终端 Coding Agent。它的目标�
 - Skills、Subagents、Tasks、Extensions、Plugins、Memory 和 MCP；
 - `traceforce` console script、当前目录启动、REPL 和一次性任务；
 - 三个包的离线测试和独立 wheel 构建；
-- Textual 全屏 TUI：对话流、工具卡片、异步权限确认、任务取消和 Session 命令；
+- Textual 全屏 TUI：对话流、可选中复制的对话和工具详情、可折叠/关闭的工具卡片、异步权限确认、任务取消和 Session 命令；内置 bash 已采用非交互 stdin、环境变量和 Unix 进程组清理；
 
 ## 下一阶段：可观察的交付闭环
 
@@ -25,6 +25,8 @@ TraceForce 当前版本已经是可运行的终端 Coding Agent。它的目标�
 - [x] 将现有事件流映射为状态栏、对话区、输入区和工具卡片；
 - [x] 展示工具名称、参数摘要、耗时、状态和截断结果；
 - [x] 支持权限确认、任务中止、Session 新建和恢复；
+- [x] 对话和工具详情支持选择复制，工具卡片支持折叠、详情复制和关闭；
+- [x] 内置 bash 使用 EOF stdin、非交互环境变量、超时处理和 Unix 进程组清理；
 - [x] 保留现有纯终端模式，TUI 只作为 runtime 事件消费者。
 
 ### P1：结构化证据
@@ -37,9 +39,9 @@ TraceForce 当前版本已经是可运行的终端 Coding Agent。它的目标�
 
 ### P2：可靠性与发布
 
-- [ ] bash 子进程使用进程组，实现可控的组级取消；
-- [ ] 补充模型重试、限流和网络恢复的可观察状态；
-- [ ] 增加跨平台 smoke tests；
+- [ ] 完整交互式 PTY 终端转发；
+- [ ] 任意第三方同步工具的强制终止；
+- [ ] 补充跨平台 smoke tests；
 - [ ] 完善 wheel 元数据、版本策略、发布检查和 release automation；
 - [ ] 在 API 稳定后再考虑 PyPI 发布。
 

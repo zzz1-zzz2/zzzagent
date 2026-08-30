@@ -173,6 +173,49 @@ async def test_bash_dangerous(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_bash_noninteractive_stdin_and_environment(tmp_path):
+    """bash 给命令 EOF，并提供非交互环境变量。"""
+    bash = make_bash_tool(tmp_path)
+    script = tmp_path / "_stdin_env.py"
+    script.write_text(
+        "import os, sys; "
+        "data = sys.stdin.read(); "
+        "assert data == ''; "
+        "print(os.environ['CI']); "
+        "print(os.environ['PIP_NO_INPUT'])",
+        encoding="utf-8",
+    )
+    result = await bash.execute({"command": f"{sys.executable} _stdin_env.py"})
+    assert result.ok is True
+    assert result.data == "1\n1"
+
+
+@pytest.mark.anyio
+async def test_bash_nonzero_exit_is_error(tmp_path):
+    """非零退出码必须反馈为结构化工具错误。"""
+    bash = make_bash_tool(tmp_path)
+    result = await bash.execute(
+        {"command": f"{sys.executable} -c \"print('failed'); raise SystemExit(7)\""}
+    )
+    assert result.ok is False
+    assert "status 7" in (result.error or "")
+    assert "failed" in (result.error or "")
+
+
+@pytest.mark.anyio
+async def test_bash_cancellation_reaps_process(tmp_path):
+    """取消 bash 后不应留下正在运行的子进程。"""
+    bash = make_bash_tool(tmp_path)
+    task = asyncio.create_task(
+        bash.execute({"command": f"{sys.executable} -c \"import time; time.sleep(30)\""})
+    )
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.anyio
 async def test_bash_timeout_captures_partial_output(tmp_path, monkeypatch):
     """超时自动捕获已输出的日志并给出提示。"""
     import traceforce.tools as files

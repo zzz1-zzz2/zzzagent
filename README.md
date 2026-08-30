@@ -5,7 +5,7 @@
 > **Developed by zzz** · GitHub: [zzz1-zzz2](https://github.com/zzz1-zzz2/zzzagent)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-304%20passed-2ea44f)](#测试与验收)
+[![Tests](https://img.shields.io/badge/tests-309%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
 TraceForce 是由 **zzz** 独立开发的、面向真实软件工程任务的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
@@ -52,7 +52,7 @@ TraceForce 不把模型的第一段回答当作任务完成，而是要求任务
 - 相对路径从 workspace 根目录解析；
 - `resolve()` 后检查路径是否仍在 workspace 内；
 - `../`、越界绝对路径和符号链接越界访问会被拒绝；
-- `bash` 在 workspace 中执行；
+- `bash` 在 workspace 中执行，使用 EOF stdin 和非交互环境变量，设置超时并在 Unix 上按进程组清理；
 - 写操作使用按文件锁，避免同一文件并发覆盖；
 - 非交互环境默认拒绝高风险工具调用；
 - `--yes` 只跳过确认，不会关闭路径检查、危险命令过滤和超时保护。
@@ -248,10 +248,14 @@ uv run traceforce --workspace /path/to/your-project --tui
 uv run traceforce --workspace /path/to/your-project --tui "运行测试并修复失败"
 ```
 
-TUI 展示 workspace/session 侧栏、assistant 流式输出、工具参数和结果卡片，并在界面内提供
-Allow/Deny 权限弹窗。可使用 `/help`、`/session new`、`/session ID`、`/sessions`、`/clear`、
-`/mcp` 和 `/exit`；Ctrl+C 取消当前任务，Ctrl+L 清除可见日志，Ctrl+Q 退出。`--tui` 不改变
-runtime 的 Agent loop、workspace 边界或工具权限策略。
+TUI 展示 workspace/session 侧栏、assistant 流式输出、可选中复制的对话与工具详情、可折叠的
+工具状态卡片，并在界面内提供 Allow/Deny 权限弹窗。已完成的卡片默认折叠，可使用 `Copy details`
+复制详情或 `Close` 隐藏卡片；关闭只影响可见 UI，不取消底层工具调用。可使用 `/help`、`/session new`、
+`/session ID`、`/sessions`、`/clear`、`/mcp` 和 `/exit`；Ctrl+C 在无选区时取消当前任务，有选区时复制，
+Ctrl+Shift+C 明确复制选区，Ctrl+L 清除可见日志，Ctrl+Q 退出。终端剪贴板支持取决于终端的 OSC52
+能力。内置 bash 使用 EOF stdin、非交互环境变量、超时和 Unix 进程组清理；需要交互式输入的命令
+不会获得 TUI stdin，应改用 `--yes`、`-y` 或 `--no-input` 等非交互参数。`--tui` 不改变 runtime 的
+Agent loop、workspace 边界或工具权限策略。
 
 ---
 
@@ -342,9 +346,9 @@ uv build
 - Skills、Subagents、Tasks、Extensions、Plugins、Memory；
 - workspace 路径安全和文件修改；
 - CLI presenter、权限确认和 MCP 集成；
-- Textual TUI mount、streaming、tool cards、异步权限弹窗和取消控制。
+- Textual TUI mount、streaming、tool cards、异步权限弹窗、复制/关闭交互和取消控制。
 
-当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 40 项，共 304 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
+当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 45 项，共 309 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
 
 ---
 
@@ -355,7 +359,8 @@ uv build
 - typed trajectory；
 - 独立的 workspace 变更追踪与 evidence 数据模型；
 - `WorkspaceChangeTracker` 和 `traceforce check`；
-- 进程组级即时取消；
+- 完整交互式 PTY 终端转发；
+- 任意第三方同步工具的强制终止；
 - 完整 release automation 和 PyPI 发布流程。
 
 详见 [ROADMAP.md](ROADMAP.md)。

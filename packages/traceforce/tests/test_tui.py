@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from textual.widgets import TextArea
 from traceforce_llm import Response, StreamChunk
 from traceforce_runtime.events import (
     AgentEnd,
@@ -100,11 +101,12 @@ async def test_streaming_and_tool_events_render_cards(tmp_path: Path) -> None:
         app.handle_event(ToolExecutionStart("tool-1", "read", {"path": "a.py"}))
         await pilot.pause()
         card = app.query_one("#cards ToolCard", ToolCard)
-        assert "RUNNING" in str(card.render())
+        assert card.title.startswith("RUNNING")
+        assert card.query_one("#details", TextArea).text == '{"path":"a.py"}'
         app.handle_event(ToolExecutionEnd("tool-1", "read", "file contents", False))
         await pilot.pause()
-        assert "DONE" in str(card.render())
-        assert "file contents" in str(card.render())
+        assert card.title.startswith("DONE")
+        assert "file contents" in card.query_one("#details", TextArea).text
         app.handle_event(TurnEnd(message=assistant, tool_results=[]))
         app.handle_event(AgentEnd([], "hello", 1, "end_turn"))
         assert app._status_text == "end_turn · 1 turns"
@@ -118,7 +120,7 @@ async def test_one_shot_task_completes_and_renders_assistant(tmp_path: Path) -> 
         for _ in range(5):
             await pilot.pause()
         conversation = app.query_one("#conversation", ConversationLog)
-        assert any("hello" in str(child.render()) for child in conversation.children)
+        assert "hello" in conversation.text
         assert app._run_task is None
         assert app._status_text == "idle"
         app.exit()
@@ -173,8 +175,49 @@ def test_parser_supports_tui_flag() -> None:
     assert args.prompt == "task"
 
 
-def test_tool_card_clips_large_result(tmp_path: Path) -> None:
+@pytest.mark.anyio
+async def test_tool_card_clips_large_result(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
     event = ToolExecutionStart("x", "read", {"path": "a"})
-    card = ToolCard(event)
-    card.finish(ToolExecutionEnd("x", "read", "x" * 3000, False))
-    assert "clipped" in str(card.render())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(event)
+        await pilot.pause()
+        card = app.query_one("#cards ToolCard", ToolCard)
+        card.finish(ToolExecutionEnd("x", "read", "x" * 3000, False))
+        await pilot.pause()
+        assert "clipped" in card.query_one("#details", TextArea).text
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_conversation_is_selectable_and_copyable(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    copied: list[str] = []
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        conversation = app.query_one("#conversation", ConversationLog)
+        conversation.append_block("SYSTEM", "copy this text")
+        conversation.select_all()
+        app.copy_to_clipboard = copied.append
+        app.action_copy_selection()
+        assert copied == [conversation.selected_text]
+        assert "copy this text" in copied[0]
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_tool_card_can_close_without_affecting_task(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    event = ToolExecutionStart("tool-1", "read", {"path": "a.py"})
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(event)
+        await pilot.pause()
+        card = app.query_one("#cards ToolCard", ToolCard)
+        card.post_message(ToolCard.Closed(card))
+        await pilot.pause()
+        assert not app.query("#cards ToolCard")
+        assert "tool-1" not in app._current_cards
+        app.handle_event(ToolExecutionEnd("tool-1", "read", "late", False))
+        app.exit()

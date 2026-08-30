@@ -13,9 +13,10 @@ from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input, Label, Static
+from textual.widgets import Button, Collapsible, Footer, Header, Input, Label, Static, TextArea
 
 from traceforce_runtime.events import (
     AgentEnd,
@@ -46,83 +47,126 @@ from traceforce.identity import (
 )
 
 
-class ToolCard(Static):
-    """显示一个工具调用的参数、耗时、状态和最终结果。"""
+class ToolCard(Collapsible):
+    """显示一个可折叠、可复制、可关闭的工具调用记录。"""
+
+    class Closed(Message):
+        """请求产品层移除卡片的可见内容，不影响实际工具执行。"""
+
+        def __init__(self, card: ToolCard) -> None:
+            self.card = card
+            super().__init__()
 
     def __init__(self, event: ToolExecutionStart) -> None:
-        super().__init__(self._start_text(event), markup=False, classes="tool-card running")
         self.tool_call_id = event.tool_call_id
         self.tool_name = event.tool_name
         self._started_at = time.monotonic()
+        self._details = _format_args(event.args)
+        self._state = "running"
+        self._title_text_value = self._title_text("RUNNING")
+        super().__init__(
+            TextArea(
+                self._details,
+                read_only=True,
+                soft_wrap=True,
+                id="details",
+                classes="tool-details",
+            ),
+            Horizontal(
+                Button("Copy details", id="copy"),
+                Button("Close", variant="default", id="close"),
+                classes="tool-actions",
+            ),
+            title=self._title_text("RUNNING"),
+            collapsed=False,
+            classes="tool-card running",
+        )
 
     def finish(self, event: ToolExecutionEnd) -> None:
-        """将卡片从运行态更新为成功或错误态。"""
+        """将卡片从运行态更新为成功或错误态，并自动折叠详情。"""
         status = "ERROR" if event.is_error else "DONE"
         elapsed = time.monotonic() - self._started_at
+        self._state = "error" if event.is_error else "success"
         self.remove_class("running")
-        self.add_class("error" if event.is_error else "success")
-        self.update(
-            f"{status}  {event.tool_name}  ({elapsed:.1f}s)\n"
-            f"{_clip(event.result, 2400)}"
-        )
+        self.add_class(self._state)
+        self._details = f"{self._details}\n\nRESULT\n{_clip(event.result, 2400)}"
+        self._title_text_value = self._title_text(status, elapsed)
+        self.title = self._title_text_value
+        self.collapsed = True
+        self._update_details()
 
     def block(self, reason: str) -> None:
         """显示权限拒绝等未进入实际执行阶段的调用。"""
         elapsed = time.monotonic() - self._started_at
+        self._state = "blocked"
         self.remove_class("running")
         self.add_class("blocked")
-        self.update(
-            f"BLOCKED  {self.tool_name}  ({elapsed:.1f}s)\n"
-            f"{_clip(reason, 1200)}"
-        )
+        self._details = f"{self._details}\n\nBLOCKED\n{_clip(reason, 1200)}"
+        self.title = self._title_text("BLOCKED", elapsed)
+        self.collapsed = True
+        self._update_details()
 
-    @staticmethod
-    def _start_text(event: ToolExecutionStart) -> str:
-        return f"RUNNING  {event.tool_name}\n{_format_args(event.args)}"
+    def cancel(self) -> None:
+        """标记尚未结束的工具调用已被用户取消。"""
+        if self._state != "running":
+            return
+        elapsed = time.monotonic() - self._started_at
+        self._state = "cancelled"
+        self.remove_class("running")
+        self.add_class("cancelled")
+        self._details = f"{self._details}\n\nCANCELLED\nTool execution cancelled by user."
+        self.title = self._title_text("CANCELLED", elapsed)
+        self.collapsed = True
+        self._update_details()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close":
+            self.post_message(self.Closed(self))
+        elif event.button.id == "copy":
+            self.app.copy_to_clipboard(self._details)
+
+    def _update_details(self) -> None:
+        with contextlib.suppress(Exception):
+            self.query_one("#details", TextArea).load_text(self._details)
+
+    def _title_text(self, status: str, elapsed: float | None = None) -> str:
+        suffix = f"  ({elapsed:.1f}s)" if elapsed is not None else ""
+        return f"{status}  {self.tool_name}{suffix}"
 
 
-class ConversationLog(VerticalScroll):
-    """可更新的对话区，assistant token 会更新同一个消息块。"""
+class ConversationLog(TextArea):
+    """只读、可选中的对话区，assistant token 会更新同一份文本。"""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._assistant_widget: Static | None = None
-        self._assistant_text = ""
+        kwargs.setdefault("read_only", True)
+        kwargs.setdefault("soft_wrap", True)
+        super().__init__("", *args, **kwargs)
+        self._transcript = ""
+        self._assistant_open = False
 
     def append_block(self, label: str, text: str, *, classes: str = "system") -> None:
-        """追加一个不可变的 user/system/assistant 消息块。"""
+        """追加一个 user/system 消息块。"""
+        del classes  # TextArea 使用统一的只读选区样式。
         self._finish_assistant()
-        self.mount(
-            Static(
-                f"{label}\n{text}",
-                markup=False,
-                classes=f"message-block {classes}",
-            )
-        )
-        self.scroll_end(animate=False)
+        self._append_block(f"{label}\n{text}")
 
     def start_assistant(self) -> None:
         """开始一条可增量更新的 assistant 消息。"""
         self._finish_assistant()
-        self._assistant_text = ""
-        self._assistant_widget = Static(
-            "ASSISTANT\n",
-            markup=False,
-            classes="message-block assistant",
-        )
-        self.mount(self._assistant_widget)
-        self.scroll_end(animate=False)
+        if self._transcript:
+            self._transcript += "\n\n"
+        self._transcript += "ASSISTANT\n"
+        self._assistant_open = True
+        self._refresh_text()
 
     def assistant_chunk(self, text: str) -> None:
-        """把 token 追加到当前 assistant 消息，而不是制造大量孤立行。"""
+        """把 token 追加到当前 assistant 消息，而不是制造大量孤立控件。"""
         if not text:
             return
-        if self._assistant_widget is None:
+        if not self._assistant_open:
             self.start_assistant()
-        self._assistant_text += text
-        assert self._assistant_widget is not None
-        self._assistant_widget.update(f"ASSISTANT\n{self._assistant_text}")
-        self.scroll_end(animate=False)
+        self._transcript += text
+        self._refresh_text()
 
     def assistant_message(self, text: str) -> None:
         """渲染非流式模型返回的完整 assistant 消息。"""
@@ -136,13 +180,22 @@ class ConversationLog(VerticalScroll):
 
     def clear_transcript(self) -> None:
         """清除所有消息并重置增量状态。"""
-        self._assistant_widget = None
-        self._assistant_text = ""
-        self.remove_children()
+        self._transcript = ""
+        self._assistant_open = False
+        self.load_text("")
+
+    def _append_block(self, text: str) -> None:
+        if self._transcript:
+            self._transcript += "\n\n"
+        self._transcript += text
+        self._refresh_text()
+
+    def _refresh_text(self) -> None:
+        self.load_text(self._transcript)
+        self.scroll_end(animate=False)
 
     def _finish_assistant(self) -> None:
-        self._assistant_widget = None
-        self._assistant_text = ""
+        self._assistant_open = False
 
 
 class PermissionDialog(ModalScreen[bool]):
@@ -248,32 +301,33 @@ class TraceForceApp(App[None]):
     }
     .message-block {
         width: 1fr;
+        height: auto;
         padding: 0 1;
         margin: 0 0 1 0;
-    }
-    .message-block.user {
-        color: #9ecbff;
-        border-left: tall #4f9cf5;
-    }
-    .message-block.assistant {
-        color: #e6edf3;
-        border-left: tall #3fb950;
-    }
-    .message-block.system {
-        color: #9fb0c3;
-    }
-    #cards {
-        height: auto;
-        max-height: 18;
-        overflow-y: auto;
-        padding: 0 1;
     }
     .tool-card {
-        margin: 0 0 1 0;
-        padding: 1;
-        border: round #c99a2e;
         background: #1c2530;
         color: #f2d58a;
+    }
+    .tool-card > .collapsible--title {
+        padding: 0 1;
+    }
+    .tool-card .tool-details {
+        height: auto;
+        max-height: 18;
+        border: round #2d3a49;
+        background: #151d27;
+    }
+    .tool-actions {
+        height: auto;
+        align: right middle;
+        padding-top: 1;
+    }
+    .tool-actions Button {
+        margin-left: 1;
+    }
+    .tool-card.running {
+        border: round #c99a2e;
     }
     .tool-card.success {
         border: round #3fb950;
@@ -283,7 +337,8 @@ class TraceForceApp(App[None]):
         border: round #f85149;
         color: #ffb4ad;
     }
-    .tool-card.blocked {
+    .tool-card.blocked,
+    .tool-card.cancelled {
         border: round #9b6baf;
         color: #d8b4e8;
     }
@@ -331,7 +386,8 @@ class TraceForceApp(App[None]):
     """
 
     BINDINGS = [
-        Binding("ctrl+c", "cancel_task", "Cancel", priority=True),
+        Binding("ctrl+c", "cancel_or_copy", "Cancel / Copy", priority=True),
+        Binding("ctrl+shift+c", "copy_selection", "Copy selection"),
         Binding("ctrl+l", "clear_log", "Clear log"),
         Binding("ctrl+q", "quit", "Quit"),
     ]
@@ -403,7 +459,8 @@ class TraceForceApp(App[None]):
             f"session\n{self.session_id}\n\n"
             "controls\n"
             "Enter  send task\n"
-            "Ctrl+C  cancel\n"
+            "Ctrl+C  cancel (or copy selection)\n"
+            "Ctrl+Shift+C  copy selection\n"
             "Ctrl+L  clear log\n"
             "Ctrl+Q  quit\n\n"
             "commands\n"
@@ -583,6 +640,46 @@ class TraceForceApp(App[None]):
         self._status_text = text
         self.query_one("#status", Label).update(text)
 
+    def on_tool_card_closed(self, event: ToolCard.Closed) -> None:
+        """只关闭可见卡片，不影响已经提交给 runtime 的工具调用。"""
+        card = event.card
+        self._current_cards.pop(card.tool_call_id, None)
+        if card.is_attached:
+            card.remove()
+
+    def _copy_focused_selection(self) -> bool:
+        """复制当前已有的 TextArea 选区，即使焦点刚回到输入框。"""
+        candidates: list[TextArea] = []
+        focused = self.focused
+        if isinstance(focused, TextArea):
+            candidates.append(focused)
+        candidates.extend(
+            widget
+            for widget in self.query(TextArea)
+            if widget is not focused
+        )
+        for widget in candidates:
+            with contextlib.suppress(Exception):
+                selected = widget.selected_text
+                if selected:
+                    self.copy_to_clipboard(selected)
+                    self._set_status("copied selection")
+                    return True
+        return False
+
+    def action_copy_selection(self) -> None:
+        """将当前只读文本控件中的选区复制到终端剪贴板。"""
+        self._copy_focused_selection()
+
+    def action_cancel_or_copy(self) -> None:
+        """有选区时复制，否则保留 Ctrl+C 的取消语义。"""
+        if not self._copy_focused_selection():
+            self.action_cancel_task()
+
+    def _mark_running_cards_cancelled(self) -> None:
+        for card in list(self._current_cards.values()):
+            card.cancel()
+
     def handle_event(self, event: Any) -> None:
         """同步接收 runtime hook 事件并更新 TUI。"""
         if isinstance(event, AgentStart):
@@ -605,7 +702,7 @@ class TraceForceApp(App[None]):
         elif isinstance(event, ToolExecutionEnd):
             self._finish_stream_line()
             card = self._current_cards.get(event.tool_call_id)
-            if card is not None:
+            if card is not None and card.is_attached:
                 card.finish(event)
             self._set_status("tool error" if event.is_error else "tool complete")
         elif isinstance(event, TurnEnd):
@@ -636,6 +733,7 @@ class TraceForceApp(App[None]):
         if self._run_task is None:
             self._set_status("idle")
             return
+        self._mark_running_cards_cancelled()
         self.agent.agent.abort()
         self._run_task.cancel()
         self._set_status("cancelling")
@@ -651,6 +749,7 @@ class TraceForceApp(App[None]):
             self.permission_controller.cancel()
         task = self._run_task
         if task is not None:
+            self._mark_running_cards_cancelled()
             self.agent.agent.abort()
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
