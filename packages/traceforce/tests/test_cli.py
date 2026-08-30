@@ -40,6 +40,7 @@ def test_parser_supports_product_options():
             "--model",
             "deepseek-chat",
             "--yes",
+            "--tui",
             "fix the bug",
         ]
     )
@@ -47,6 +48,7 @@ def test_parser_supports_product_options():
     assert args.provider == "deepseek"
     assert args.model == "deepseek-chat"
     assert args.assume_yes is True
+    assert args.tui is True
     assert args.prompt == "fix the bug"
 
 

@@ -3,7 +3,7 @@
 > 面向真实软件工程任务的可验证编程智能体
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-296%20passed-2ea44f)](#测试与验收)
+[![Tests](https://img.shields.io/badge/tests-303%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
 TraceForce 是一个从零实现的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
@@ -74,7 +74,7 @@ TraceForce 由三个独立 Python 包组成：
 ```text
 ┌────────────────────────────────────────────────────────────┐
 │ traceforce                                                  │
-│ CodingAgent · CLI · REPL · 文件工具 · 权限确认 · MCP       │
+│ CodingAgent · CLI · REPL · TUI · 文件工具 · 权限确认 · MCP  │
 └──────────────────────────────┬─────────────────────────────┘
                                │
 ┌──────────────────────────────▼─────────────────────────────┐
@@ -123,7 +123,8 @@ TraceForce 由三个独立 Python 包组成：
 - 权限确认；
 - 项目说明加载（`AGENTS.md`、`CLAUDE.md`）；
 - MCP stdio 客户端；
-- Session 列表和恢复。
+- Session 列表和恢复；
+- Textual 全屏 TUI（`--tui`）：对话流、工具卡片、异步权限确认、取消和 Session 命令。
 
 ---
 
@@ -236,6 +237,20 @@ uv run traceforce --workspace /path/to/your-project \
 
 运行期间按 Ctrl+C 会请求 Agent 在安全点停止当前任务，并返回 REPL。当前版本是合作式取消；正在运行的外部子进程不会保证立即被进程组级终止。
 
+### Textual 全屏界面
+
+保留纯终端模式作为默认入口；使用 `--tui` 启动全屏 Textual 界面：
+
+```bash
+uv run traceforce --workspace /path/to/your-project --tui
+uv run traceforce --workspace /path/to/your-project --tui "运行测试并修复失败"
+```
+
+TUI 展示 workspace/session 侧栏、assistant 流式输出、工具参数和结果卡片，并在界面内提供
+Allow/Deny 权限弹窗。可使用 `/help`、`/session new`、`/session ID`、`/sessions`、`/clear`、
+`/mcp` 和 `/exit`；Ctrl+C 取消当前任务，Ctrl+L 清除可见日志，Ctrl+Q 退出。`--tui` 不改变
+runtime 的 Agent loop、workspace 边界或工具权限策略。
+
 ---
 
 ## CLI 参数
@@ -251,6 +266,7 @@ uv run traceforce --workspace /path/to/your-project \
 --max-tokens N            模型输出 token 上限
 --yes                     跳过 bash/write/edit 确认
 --max-iterations N        限制一次任务的 Agent 迭代次数
+--tui                     使用 Textual 全屏界面
 --version                 打印版本
 ```
 
@@ -323,18 +339,17 @@ uv build
 - Context 压缩和工具结果落盘；
 - Skills、Subagents、Tasks、Extensions、Plugins、Memory；
 - workspace 路径安全和文件修改；
-- CLI presenter、权限确认和 MCP 集成。
+- CLI presenter、权限确认和 MCP 集成；
+- Textual TUI mount、streaming、tool cards、异步权限弹窗和取消控制。
 
-当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 32 项，共 296 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
+当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 39 项，共 303 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
 
 ---
 
 ## 当前范围
 
-当前版本已经提供可运行的终端 Coding Agent，以及可复用的异步 Agent runtime。以下能力仍在路线图中，不能视为当前版本已实现：
+当前版本已经提供可运行的终端 Coding Agent、Textual 全屏 TUI，以及可复用的异步 Agent runtime。以下能力仍在路线图中，不能视为当前版本已实现：
 
-- Textual 全屏 TUI；
-- 折叠式 tool cards 和完整 Markdown 交互界面；
 - typed trajectory；
 - 独立的 workspace 变更追踪与 evidence 数据模型；
 - `WorkspaceChangeTracker` 和 `traceforce check`；

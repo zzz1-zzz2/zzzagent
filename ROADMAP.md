@@ -12,17 +12,18 @@ TraceForce 当前版本已经是可运行的终端 Coding Agent。后续工作�
 - 生命周期事件、Hook、Session 恢复/回退/分叉和上下文压缩；
 - Skills、Subagents、Tasks、Extensions、Plugins、Memory 和 MCP；
 - `traceforce` console script、当前目录启动、REPL 和一次性任务；
-- 三个包的离线测试和独立 wheel 构建。
+- 三个包的离线测试和独立 wheel 构建；
+- Textual 全屏 TUI：对话流、工具卡片、异步权限确认、任务取消和 Session 命令；
 
 ## 下一阶段：可观察的交付闭环
 
 ### P0：Textual TUI
 
-- [ ] 在产品层增加 Textual 全屏界面；
-- [ ] 将现有事件流映射为状态栏、对话区、输入区和工具卡片；
-- [ ] 展示工具名称、参数摘要、耗时、状态和截断结果；
-- [ ] 支持权限确认、任务中止、Session 新建和恢复；
-- [ ] 保留现有纯终端模式，TUI 只作为 runtime 事件消费者。
+- [x] 在产品层增加 Textual 全屏界面；
+- [x] 将现有事件流映射为状态栏、对话区、输入区和工具卡片；
+- [x] 展示工具名称、参数摘要、耗时、状态和截断结果；
+- [x] 支持权限确认、任务中止、Session 新建和恢复；
+- [x] 保留现有纯终端模式，TUI 只作为 runtime 事件消费者。
 
 ### P1：结构化证据
 

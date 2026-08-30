@@ -8,6 +8,7 @@ dependencies = [
     "traceforce-llm",
     "mcp>=2.0.0,<2.1",
     "python-dotenv>=1.0,<2.0",
+    "textual>=0.70,<1.0",
 ]
 
 [project.scripts]

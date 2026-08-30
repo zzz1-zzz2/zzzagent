@@ -259,6 +259,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=30,
         help="限制一次任务的 Agent 迭代次数，默认 30",
     )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="使用 Textual 全屏界面（默认仍使用纯终端模式）",
+    )
     parser.add_argument("--version", action="version", version=VERSION)
     return parser
 
@@ -414,7 +419,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        asyncio.run(async_main(args))
+        if args.tui:
+            from traceforce.tui import run_tui
+
+            run_tui(args)
+        else:
+            asyncio.run(async_main(args))
     except KeyboardInterrupt:
         print("\n再见。")
     except (RuntimeError, ValueError) as exc:
