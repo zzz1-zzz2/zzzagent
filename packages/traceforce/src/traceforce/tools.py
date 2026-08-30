@@ -31,7 +31,7 @@ def make_read_tool(root: str | Path) -> Tool:
         try:
             fp = _safe_path(root, path)
             if not fp.exists():
-                return ToolResult(ok=False, error=f"File '{path}' does not exist.")
+                return ToolResult(ok=False, error=f"Error: File '{path}' does not exist.")
             if fp.is_dir():
                 return ToolResult(
                     ok=False, error=f"'{path}' is a directory, not a regular file."
@@ -104,7 +104,7 @@ def make_edit_tool(
         try:
             fp = _safe_path(root, path)
             if not fp.exists():
-                return ToolResult(ok=False, error=f"File '{path}' does not exist.")
+                return ToolResult(ok=False, error=f"Error: File '{path}' does not exist.")
             if fp.is_dir():
                 return ToolResult(
                     ok=False, error=f"'{path}' is a directory, not a regular file."
