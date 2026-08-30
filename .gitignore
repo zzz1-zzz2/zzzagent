@@ -1,0 +1,22 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+build/
+dist/
+*.egg-info/
+.traceforce/
+
+# 本地工具配置与扩展
+.mcp.json
+
+# 本地私有项目说明
+CLAUDE.md
+AGENTS.md

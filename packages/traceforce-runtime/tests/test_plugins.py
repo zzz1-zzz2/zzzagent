@@ -1,0 +1,396 @@
+"""PluginManifest、Plugin 和 PluginManager 的单元测试。"""
+
+from __future__ import annotations
+
+import json
+import tempfile
+from pathlib import Path
+
+import pytest  # pyright: ignore[reportMissingImports]
+from traceforce_llm import (  # pyright: ignore[reportMissingImports]
+    Response,
+    StreamChunk,
+)
+
+from traceforce_runtime.agent import Agent
+from traceforce_runtime.plugins import (
+    Plugin,
+    PluginAuthor,
+    PluginManager,
+)
+from traceforce_runtime.session import Session
+
+
+class FakePluginLLM:
+    def __init__(self, responses: list[Response] | None = None):
+        self.responses = list(responses or [])
+        self.calls: list[dict] = []
+
+    async def achat_stream(self, messages, tools=None, model=None):
+        self.calls.append({"messages": messages, "tools": tools})
+        resp = (
+            self.responses.pop(0)
+            if self.responses
+            else Response(content="ok", model="test")
+        )
+        yield StreamChunk(
+            content=resp.content,
+            tool_calls=resp.tool_calls,
+            usage=resp.usage,
+            finish_reason=resp.finish_reason,
+        )
+
+
+def test_plugin_author_parsing():
+    # 字符串形式解析（含 email）
+    a1 = PluginAuthor.from_value("TraceForce Team <support@example.com>")
+    assert a1.name == "TraceForce Team"
+    assert a1.email == "support@example.com"
+    assert a1.url is None
+
+    # 纯字符串形式
+    a2 = PluginAuthor.from_value("TraceForce")
+    assert a2.name == "TraceForce"
+    assert a2.email is None
+
+    # 字典形式解析
+    a3 = PluginAuthor.from_value(
+        {
+            "name": "TraceForce",
+            "email": "dev@example.com",
+            "url": "https://example.com",
+        }
+    )
+    assert a3.name == "TraceForce"
+    assert a3.email == "dev@example.com"
+    assert a3.url == "https://example.com"
+
+    # 非法值兜底
+    a4 = PluginAuthor.from_value(12345)
+    assert a4.name == "unknown"
+
+
+def test_plugin_manifest_loading_and_fallback():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # 1. 包含 .traceforce-plugin/plugin.json 的标准插件
+        p1 = Path(tmpdir) / "plugin-one"
+        (p1 / ".traceforce-plugin").mkdir(parents=True)
+        (p1 / ".traceforce-plugin" / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "name": "code-quality",
+                    "version": "1.2.0",
+                    "description": "Quality tools",
+                    "author": "Tester <test@test.com>",
+                    "homepage": "https://example.com",
+                    "license": "MIT",
+                    "keywords": ["lint", "test"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        plugin1 = Plugin.from_directory(p1)
+        assert plugin1.name == "code-quality"
+        assert plugin1.manifest.version == "1.2.0"
+        assert plugin1.manifest.author is not None
+        assert plugin1.manifest.author.email == "test@test.com"
+        assert plugin1.manifest.homepage == "https://example.com"
+        assert plugin1.manifest.license == "MIT"
+        assert plugin1.manifest.keywords == ["lint", "test"]
+
+        # 2. 包含 .plugin/plugin.json 的通用插件
+        p2 = Path(tmpdir) / "plugin-two"
+        (p2 / ".plugin").mkdir(parents=True)
+        (p2 / ".plugin" / "plugin.json").write_text(
+            json.dumps({"name": "lint-suite"}),
+            encoding="utf-8",
+        )
+        plugin2 = Plugin.from_directory(p2)
+        assert plugin2.name == "lint-suite"
+        assert plugin2.manifest.version == "1.0.0"
+
+        # 3. 包含根级 plugin.json 的插件
+        p3 = Path(tmpdir) / "plugin-three"
+        p3.mkdir(parents=True)
+        (p3 / "plugin.json").write_text(
+            json.dumps({"name": "root-json-plugin"}),
+            encoding="utf-8",
+        )
+        plugin3 = Plugin.from_directory(p3)
+        assert plugin3.name == "root-json-plugin"
+
+        # 4. 根目录直接放 SKILL.md 的单技能插件简写（无 manifest，目录名兜底）
+        p4 = Path(tmpdir) / "single-skill-plugin"
+        p4.mkdir(parents=True)
+        (p4 / "SKILL.md").write_text(
+            "---\ndescription: single skill\n---\n\nBody", encoding="utf-8"
+        )
+        plugin4 = Plugin.from_directory(p4)
+        assert plugin4.name == "single-skill-plugin"
+        assert plugin4.manifest.version == "1.0.0"
+        assert plugin4.skills_dir == p4
+
+        # 5. 损坏的 JSON 语法错误，降级为目录名兜底推断
+        p5 = Path(tmpdir) / "broken-json-plugin"
+        (p5 / ".traceforce-plugin").mkdir(parents=True)
+        (p5 / ".traceforce-plugin" / "plugin.json").write_text(
+            "{broken json", encoding="utf-8"
+        )
+        plugin5 = Plugin.from_directory(p5)
+        assert plugin5.name == "broken-json-plugin"
+
+        # 6. 带 UTF-8 BOM 头的 plugin.json
+        p6 = Path(tmpdir) / "bom-plugin"
+        (p6 / ".traceforce-plugin").mkdir(parents=True)
+        bom_bytes = "\ufeff" + json.dumps({"name": "bom-plugin-name", "version": "2.0.0"})
+        (p6 / ".traceforce-plugin" / "plugin.json").write_text(bom_bytes, encoding="utf-8")
+        plugin6 = Plugin.from_directory(p6)
+        assert plugin6.name == "bom-plugin-name"
+        assert plugin6.manifest.version == "2.0.0"
+
+
+def test_plugin_resource_directories():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p = Path(tmpdir) / "bundle"
+        (p / ".traceforce-plugin").mkdir(parents=True)
+        (p / ".traceforce-plugin" / "plugin.json").write_text('{"name": "bundle"}')
+        (p / "skills").mkdir()
+        (p / "agents").mkdir()
+        (p / ".mcp.json").write_text('{"mcpServers": {}}')
+
+        plugin = Plugin.from_directory(p)
+        assert plugin.skills_dir == p / "skills"
+        assert plugin.agents_dir == p / "agents"
+        assert plugin.mcp_config_path == p / ".mcp.json"
+
+
+def test_plugin_commands_fallback_for_skills():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p = Path(tmpdir) / "legacy-commands-plugin"
+        p.mkdir(parents=True)
+        (p / "commands").mkdir()
+
+        plugin = Plugin.from_directory(p)
+        assert plugin.skills_dir == p / "commands"
+
+
+def test_plugin_manager_discovery_and_extraction():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plugins_root = Path(tmpdir) / "plugins"
+        p1 = plugins_root / "plugin-a"
+        (p1 / ".traceforce-plugin").mkdir(parents=True)
+        (p1 / ".traceforce-plugin" / "plugin.json").write_text('{"name": "plugin-a"}')
+        (p1 / "skills").mkdir()
+        (p1 / ".mcp.json").write_text('{"mcpServers": {}}')
+
+        p2 = plugins_root / "plugin-b"
+        (p2 / "agents").mkdir(parents=True)
+
+        manager = PluginManager(dirs=[plugins_root])
+        assert len(manager.plugins) == 2
+        assert "plugin-a" in manager.plugins
+        assert "plugin-b" in manager.plugins
+
+        assert manager.get_skill_dirs() == [p1 / "skills"]
+        assert manager.get_subagent_dirs() == [p2 / "agents"]
+        assert manager.get_mcp_config_paths() == [p1 / ".mcp.json"]
+
+        # 禁用其中一个插件
+        manager.plugins["plugin-a"].enabled = False
+        assert manager.get_skill_dirs() == []
+        assert manager.get_mcp_config_paths() == []
+        assert manager.get_subagent_dirs() == [p2 / "agents"]
+
+
+def test_plugin_manager_direct_plugin_dir_and_disabled():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p1 = Path(tmpdir) / "single-plugin"
+        (p1 / ".traceforce-plugin").mkdir(parents=True)
+        (p1 / ".traceforce-plugin" / "plugin.json").write_text('{"name": "single-plugin"}')
+        (p1 / "skills").mkdir()
+
+        # 直接指定单个插件目录
+        manager_single = PluginManager(dirs=[p1])
+        assert len(manager_single.plugins) == 1
+        assert "single-plugin" in manager_single.plugins
+
+        # 显式禁用 dirs=[]
+        manager_disabled = PluginManager(dirs=[])
+        assert len(manager_disabled.plugins) == 0
+        assert manager_disabled.get_skill_dirs() == []
+
+
+@pytest.mark.anyio
+async def test_agent_plugin_integration_end_to_end():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        plugin_dir = root / "code-assistant"
+
+        # 1. Plugin 包含 .traceforce-plugin/plugin.json
+        (plugin_dir / ".traceforce-plugin").mkdir(parents=True)
+        (plugin_dir / ".traceforce-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "code-assistant", "version": "1.0.0"}),
+            encoding="utf-8",
+        )
+
+        # 2. Plugin 包含 skills/
+        skill_dir = plugin_dir / "skills" / "git-commit-helper"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\ndescription: Helps format git commits\n---\n\nFormat rules here.",
+            encoding="utf-8",
+        )
+
+        # 3. Plugin 包含 agents/
+        agent_dir = plugin_dir / "agents"
+        agent_dir.mkdir(parents=True)
+        (agent_dir / "commit-reviewer.md").write_text(
+            "---\ndescription: Review commit messages\n---\n\nReview instructions.",
+            encoding="utf-8",
+        )
+
+        session = Session(path=root / "session.jsonl")
+        llm = FakePluginLLM(
+            [
+                Response(
+                    content="I have git-commit-helper skill and commit-reviewer agent available.",
+                    model="test",
+                )
+            ]
+        )
+
+        agent = Agent(
+            llm=llm,
+            tools=[],
+            session=session,
+            plugin_dirs=[plugin_dir],
+        )
+
+        assert agent.plugin_manager is not None
+        assert "code-assistant" in agent.plugin_manager.plugins
+
+        # 验证 Plugin 中的 Skill 自动注入进了 SkillManager 和 System Prompt
+        assert agent.skill_manager.get("git-commit-helper") is not None
+        assert "git-commit-helper" in agent.messages[0].content
+
+        # 验证 Plugin 中的 Subagent 自动注入进了 SubagentManager 和 task 工具
+        assert agent.subagent_manager.get("commit-reviewer") is not None
+        assert agent.registry.get("task") is not None
+        assert "commit-reviewer" in agent.messages[0].content
+
+        res = await agent.run("Check available tools")
+        assert res is not None and "git-commit-helper" in res
+
+
+@pytest.mark.anyio
+async def test_agent_plugin_single_skill_shorthand():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        plugin_dir = root / "quick-linter"
+        plugin_dir.mkdir(parents=True)
+
+        # 根目录直接放置 SKILL.md
+        (plugin_dir / "SKILL.md").write_text(
+            "---\nname: linter\ndescription: Fast code linter\n---\n\nLinting rules.",
+            encoding="utf-8",
+        )
+
+        session = Session(path=root / "session.jsonl")
+        llm = FakePluginLLM([Response(content="Linter ready", model="test")])
+
+        agent = Agent(
+            llm=llm,
+            tools=[],
+            session=session,
+            plugin_dirs=[plugin_dir],
+        )
+
+        # 根目录单 skill 被正确识别并注入
+        assert (
+            agent.skill_manager.get("linter") is not None
+            or agent.skill_manager.get("quick-linter") is not None
+        )
+        assert "<available_skills>" in agent.messages[0].content
+
+
+@pytest.mark.anyio
+async def test_agent_plugin_disabled():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        plugin_dir = root / "plugin-disabled"
+        (plugin_dir / "skills" / "my-skill").mkdir(parents=True)
+        (plugin_dir / "skills" / "my-skill" / "SKILL.md").write_text(
+            "---\ndescription: my skill\n---\n\nBody", encoding="utf-8"
+        )
+
+        session = Session(path=root / "session.jsonl")
+        llm = FakePluginLLM([Response(content="ok", model="test")])
+
+        # 显式禁用 plugin_dirs=[]
+        agent = Agent(
+            llm=llm,
+            tools=[],
+            session=session,
+            plugin_dirs=[],
+        )
+        assert agent.plugin_manager is not None
+        assert len(agent.plugin_manager.plugins) == 0
+        assert agent.skill_manager.get("my-skill") is None
+
+
+@pytest.mark.anyio
+async def test_subagent_delegation_with_plugin_agents_isolation():
+    """验证父 Agent 从 Plugin 加载 subagents 时，子 Agent 派发不会发生递归探测或工具冲突。"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        plugin_dir = root / "review-plugin"
+        agent_dir = plugin_dir / "agents"
+        agent_dir.mkdir(parents=True)
+        (agent_dir / "plugin-reviewer.md").write_text(
+            "---\ndescription: Plugin reviewer\n---\n\nReview instructions.",
+            encoding="utf-8",
+        )
+
+        session = Session(path=root / "session.jsonl")
+
+        llm = FakePluginLLM(
+            [
+                # 1. 父 Agent 发起 task 委派调用 plugin-reviewer
+                Response(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "c1",
+                            "type": "function",
+                            "function": {
+                                "name": "task",
+                                "arguments": json.dumps(
+                                    {
+                                        "prompt": "review code",
+                                        "agent_type": "plugin-reviewer",
+                                    }
+                                ),
+                            },
+                        }
+                    ],
+                    model="test",
+                ),
+                # 2. 子 Agent 执行返回
+                Response(content="Review clean", model="test"),
+                # 3. 父 Agent 最终总结
+                Response(content="Done", model="test"),
+            ]
+        )
+
+        agent = Agent(
+            llm=llm,
+            tools=[],
+            session=session,
+            plugin_dirs=[plugin_dir],
+        )
+
+        assert agent.subagent_manager.get("plugin-reviewer") is not None
+        assert agent.registry.get("task") is not None
+
+        res = await agent.run("start")
+        assert res == "Done"

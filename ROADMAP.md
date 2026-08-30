@@ -1,0 +1,51 @@
+# TraceForce 路线图
+
+TraceForce 当前版本已经是可运行的终端 Coding Agent。后续工作围绕“让每次修改都可观察、可验证、可恢复”推进。本文件只描述尚未交付的能力，不代表路线图项目已经实现。
+
+## 当前已交付
+
+- 三包分层：模型边界、运行时核心、编码产品；
+- 原生 `asyncio` Agent 循环和流式模型响应；
+- `read`、`write`、`edit`、`bash` 工具及 workspace 边界；
+- 参数校验、工具错误反馈、只读并发和写入保序；
+- 权限确认、危险命令过滤和 bash 超时；
+- 生命周期事件、Hook、Session 恢复/回退/分叉和上下文压缩；
+- Skills、Subagents、Tasks、Extensions、Plugins、Memory 和 MCP；
+- `traceforce` console script、当前目录启动、REPL 和一次性任务；
+- 三个包的离线测试和独立 wheel 构建。
+
+## 下一阶段：可观察的交付闭环
+
+### P0：Textual TUI
+
+- [ ] 在产品层增加 Textual 全屏界面；
+- [ ] 将现有事件流映射为状态栏、对话区、输入区和工具卡片；
+- [ ] 展示工具名称、参数摘要、耗时、状态和截断结果；
+- [ ] 支持权限确认、任务中止、Session 新建和恢复；
+- [ ] 保留现有纯终端模式，TUI 只作为 runtime 事件消费者。
+
+### P1：结构化证据
+
+- [ ] 引入 typed trajectory，统一记录模型请求、工具调用、工具结果和验证动作；
+- [ ] 实现 `WorkspaceChangeTracker`，区分 Agent 修改、用户修改和外部命令产生的变化；
+- [ ] 将测试、构建和 lint 结果作为结构化 evidence 暴露给产品层；
+- [ ] 增加 `traceforce check`，检查 workspace、Session 和最近任务的验证证据；
+- [ ] 为失败任务提供可复制的恢复摘要和诊断信息。
+
+### P2：可靠性与发布
+
+- [ ] bash 子进程使用进程组，实现可控的组级取消；
+- [ ] 补充模型重试、限流和网络恢复的可观察状态；
+- [ ] 增加跨平台 smoke tests；
+- [ ] 完善 wheel 元数据、版本策略、发布检查和 release automation；
+- [ ] 在 API 稳定后再考虑 PyPI 发布。
+
+## 约束
+
+后续实现必须保持：
+
+1. 不引入现成 Agent 编排框架或 Agent SDK；
+2. 不绕过 workspace 边界、权限 Hook 和凭据保护；
+3. 不把流式半成品或未验证的修改描述为完成结果；
+4. 优先使用离线、确定性测试；
+5. 新的持久化格式必须可恢复、可诊断，并明确兼容边界。
