@@ -1,6 +1,8 @@
-# TraceForce 路线图
+# TraceForce Coding Agent 路线图
 
-TraceForce 当前版本已经是可运行的终端 Coding Agent。后续工作围绕“让每次修改都可观察、可验证、可恢复”推进。本文件只描述尚未交付的能力，不代表路线图项目已经实现。
+> **Developed by zzz** · GitHub: https://github.com/zzz1-zzz2/zzzagent
+
+TraceForce 当前版本已经是可运行的终端 Coding Agent。它的目标是让模型完成“读取项目 → 分析问题 → 修改文件 → 运行验证 → 根据结果修复 → 汇报证据”的真实软件工程闭环。后续工作围绕“让每次修改都可观察、可验证、可恢复”推进。本文件只描述尚未交付的能力，不代表路线图项目已经实现。
 
 ## 当前已交付
 

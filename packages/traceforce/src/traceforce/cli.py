@@ -27,10 +27,20 @@ from traceforce_runtime.session_store import SessionStore
 from traceforce_llm import Config, LLM
 
 from traceforce.agent import CodingAgent
+from traceforce.identity import (
+    DEVELOPER_HANDLE,
+    DEVELOPER_NAME,
+    PRODUCT_NAME,
+    PURPOSE,
+    TAGLINE,
+    VERSION,
+    WORKFLOW,
+)
 
 
-VERSION = "0.1.0"
-DEFAULT_SYSTEM_PROMPT = """你是一个在本地工作区中运行的编程智能体。
+DEFAULT_SYSTEM_PROMPT = f"""你是 {PRODUCT_NAME}，由 {DEVELOPER_NAME} 开发。
+
+{PURPOSE}
 
 请自主完成用户交给你的编程任务：先阅读相关文件和项目说明，再设计并实施最小必要修改，
 最后运行合适的测试或检查命令验证结果。工具返回错误时请分析错误并继续修复，不要猜测文件内容。
@@ -226,7 +236,8 @@ def build_parser() -> argparse.ArgumentParser:
     """构造产品 CLI 参数解析器。"""
     parser = argparse.ArgumentParser(
         prog="traceforce",
-        description="在当前工作区中运行 TraceForce coding agent。",
+        description=f"{PRODUCT_NAME}：{TAGLINE}。",
+        epilog=f"由 {DEVELOPER_NAME}（GitHub: {DEVELOPER_HANDLE}）独立开发。",
     )
     parser.add_argument(
         "--workspace",
@@ -349,7 +360,10 @@ async def async_main(args: argparse.Namespace) -> None:
     try:
         await agent.agent.ensure_initialized()
 
-        print(f"traceforce {VERSION}")
+        print(f"{PRODUCT_NAME} v{VERSION}")
+        print(f"{TAGLINE}")
+        print(f"developer: {DEVELOPER_NAME} (GitHub: {DEVELOPER_HANDLE})")
+        print(f"workflow: {WORKFLOW}")
         print(f"workspace: {workspace}")
         print(f"session:   {session.id}")
         print("输入 /help 查看命令；输入 /exit 退出。")

@@ -1,12 +1,14 @@
-# TraceForce
+# TraceForce Coding Agent
 
 > 面向真实软件工程任务的可验证编程智能体
+>
+> **Developed by zzz** · GitHub: [zzz1-zzz2](https://github.com/zzz1-zzz2/zzzagent)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-303%20passed-2ea44f)](#测试与验收)
+[![Tests](https://img.shields.io/badge/tests-304%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
-TraceForce 是一个从零实现的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
+TraceForce 是由 **zzz** 独立开发的、面向真实软件工程任务的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
 
 它的目标是让模型真正参与软件工程工作：
 
@@ -342,7 +344,7 @@ uv build
 - CLI presenter、权限确认和 MCP 集成；
 - Textual TUI mount、streaming、tool cards、异步权限弹窗和取消控制。
 
-当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 39 项，共 303 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
+当前验收基线为：`traceforce-llm` 36 项、`traceforce-runtime` 228 项、`traceforce` 40 项，共 304 项测试。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
 
 ---
 

@@ -1,13 +1,12 @@
-TraceForce
-==========
+TraceForce Coding Agent
+=======================
 
-项目地址
---------
-https://github.com/zzz1-zzz2/zzzagent
+面向真实软件工程任务的可验证编程智能体
+Developed by zzz · GitHub: https://github.com/zzz1-zzz2/zzzagent
 
-项目功能
---------
-TraceForce 是一个从零实现的、面向真实软件工程任务的 Coding Agent。它可以读取工作区文件，分析问题，修改文件，执行测试或构建命令，并根据工具结果继续修复。产品层提供当前目录启动、一次性任务、REPL、Session 恢复、权限确认、流式终端输出，以及可选的 Textual 全屏 TUI。
+TraceForce 是由 zzz 独立开发的、面向真实软件工程任务的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
+
+它的核心目标是让模型真正参与软件工程工作：读取项目 -> 分析问题 -> 修改文件 -> 运行验证 -> 根据结果修复 -> 汇报证据。
 
 实现由三个独立 Python 包组成：traceforce-llm 负责 OpenAI、DeepSeek、Anthropic 及 OpenAI 兼容网关的统一模型接口；traceforce-runtime 负责 Agent 循环、工具注册、上下文、事件和 JSONL Session；traceforce 负责 Coding Agent、CLI 和 workspace 工具。
 
@@ -56,6 +55,6 @@ Agent Loop 的基本流程是：
 
 验证情况
 --------
-三个包均提供离线测试，使用 FakeLLM、Fake SDK 和临时工作区，不需要真实 API key。当前基线为 traceforce-llm 36 项、traceforce-runtime 228 项、traceforce 39 项，共 303 项测试；三个包均可独立执行 uv lock --check、pytest 和 uv build。
+三个包均提供离线测试，使用 FakeLLM、Fake SDK 和临时工作区，不需要真实 API key。当前基线为 traceforce-llm 36 项、traceforce-runtime 228 项、traceforce 40 项，共 304 项测试；三个包均可独立执行 uv lock --check、pytest 和 uv build。
 
 当前版本已提供 Textual 全屏 TUI；仍未包含 typed trajectory、WorkspaceChangeTracker、traceforce check、进程组级即时取消和 PyPI 发布自动化；这些能力在 ROADMAP.md 中列为后续工作。

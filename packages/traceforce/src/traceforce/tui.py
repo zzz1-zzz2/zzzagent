@@ -36,6 +36,14 @@ from traceforce.cli import (
     build_llm,
     load_project_instructions,
 )
+from traceforce.identity import (
+    DEVELOPER_HANDLE,
+    DEVELOPER_NAME,
+    PRODUCT_NAME,
+    PURPOSE,
+    TAGLINE,
+    WORKFLOW,
+)
 
 
 class ToolCard(Static):
@@ -203,7 +211,7 @@ class TUIPermissionController:
 class TraceForceApp(App[None]):
     """TraceForce 全屏 TUI。Agent loop 仍完全由 traceforce-runtime 驱动。"""
 
-    TITLE = "TraceForce"
+    TITLE = "TraceForce Coding Agent"
     CSS = """
     Screen {
         background: #10141b;
@@ -386,7 +394,11 @@ class TraceForceApp(App[None]):
     def _refresh_sidebar(self) -> None:
         side = self.query_one("#side", Static)
         side.update(
-            "TRACEFORCE\n\n"
+            f"{PRODUCT_NAME}\n"
+            f"{TAGLINE}\n\n"
+            f"{PURPOSE}\n\n"
+            f"developer\n{DEVELOPER_NAME}  ·  GitHub: {DEVELOPER_HANDLE}\n\n"
+            f"workflow\n{WORKFLOW}\n\n"
             f"workspace\n{self.workspace}\n\n"
             f"session\n{self.session_id}\n\n"
             "controls\n"

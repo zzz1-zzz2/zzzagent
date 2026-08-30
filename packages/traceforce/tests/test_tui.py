@@ -20,6 +20,14 @@ from traceforce_runtime.session_store import SessionStore
 
 from traceforce.agent import CodingAgent
 from traceforce.cli import build_parser
+from traceforce.identity import (
+    DEVELOPER_HANDLE,
+    DEVELOPER_NAME,
+    PRODUCT_NAME,
+    PURPOSE,
+    TAGLINE,
+    WORKFLOW,
+)
 from traceforce.tui import (
     ConversationLog,
     PermissionDialog,
@@ -64,6 +72,12 @@ async def test_app_mounts_with_workspace_and_session(tmp_path: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         side = str(app.query_one("#side").render())
+        assert PRODUCT_NAME in side
+        assert TAGLINE in side
+        assert PURPOSE in side
+        assert DEVELOPER_NAME in side
+        assert DEVELOPER_HANDLE in side
+        assert WORKFLOW in side
         assert str(tmp_path) in side
         assert app.session_id in side
         assert app.query_one("#prompt") is not None

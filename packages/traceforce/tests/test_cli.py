@@ -16,10 +16,19 @@ from traceforce_runtime.events import (
 from traceforce_llm import Message, StreamChunk
 
 from traceforce.cli import (
+    DEFAULT_SYSTEM_PROMPT,
     PermissionGate,
     TerminalPresenter,
     build_parser,
     load_project_instructions,
+)
+from traceforce.identity import (
+    DEVELOPER_HANDLE,
+    DEVELOPER_NAME,
+    PRODUCT_NAME,
+    PURPOSE,
+    TAGLINE,
+    WORKFLOW,
 )
 
 
@@ -28,6 +37,22 @@ def test_parser_defaults_to_current_workspace():
     assert args.workspace == Path(".")
     assert args.assume_yes is False
     assert args.max_iterations == 30
+
+
+def test_product_identity_is_visible_in_prompt_and_help(capsys):
+    assert PRODUCT_NAME in DEFAULT_SYSTEM_PROMPT
+    assert DEVELOPER_NAME in DEFAULT_SYSTEM_PROMPT
+    assert PURPOSE in DEFAULT_SYSTEM_PROMPT
+    assert TAGLINE in build_parser().description
+    assert DEVELOPER_HANDLE in build_parser().epilog
+    assert WORKFLOW
+    try:
+        build_parser().parse_args(["--help"])
+    except SystemExit:
+        pass
+    help_text = capsys.readouterr().out
+    assert PRODUCT_NAME in help_text
+    assert DEVELOPER_NAME in help_text
 
 
 def test_parser_supports_product_options():

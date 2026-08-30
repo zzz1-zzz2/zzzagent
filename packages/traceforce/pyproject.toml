@@ -1,7 +1,7 @@
 [project]
 name = "traceforce"
 version = "0.1.0"
-description = "TraceForce: an evidence-first coding agent for bounded workspaces"
+description = "TraceForce Coding Agent: an evidence-first coding agent developed by zzz for bounded workspaces"
 requires-python = ">=3.11"
 dependencies = [
     "traceforce-runtime",
