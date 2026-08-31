@@ -62,9 +62,9 @@ DEEPSEEK_API_KEY=
 
 ## TUI 操作
 
-TUI 显示 assistant streaming、workspace/session 状态、工具卡片和权限弹窗。工具卡片支持展开、折叠、复制和关闭；关闭只影响可见 UI，不取消底层工具执行。任务输入支持终端多行粘贴：换行会合并为空格，粘贴后仍需按 Enter 发送。若终端没有发送 bracketed paste 事件，可直接在启动命令末尾传入带引号的任务文本。
+TUI 显示 assistant streaming，并按可读节奏渐进呈现（仅调整 TUI 展示，不改变 runtime 或模型生成速度）；工具调用位于独立活动栏，宽屏并排显示在右侧，窄屏降级到主对话下方。对话和工具详情可选中复制。工具卡片支持展开、折叠、复制和关闭；关闭只影响可见 UI，不取消底层工具执行。任务输入支持终端多行粘贴：换行会合并为空格，粘贴后仍需按 Enter 发送。若终端没有发送 bracketed paste 事件，可直接在启动命令末尾传入带引号的任务文本。
 
-输出区提供 `Copy output`、`Save output` 按钮，也可以输入 `/copy` 或 `/export`。`/export` 会把当前可见对话保存到 workspace 内 `.traceforce/tui-transcript.txt`；模型错误的完整诊断保存到 `.traceforce/tui-error.txt`。这些文件被仓库忽略，但分享前仍应检查是否包含敏感信息。
+输出区提供 `Copy output`、`Save output` 按钮，也可以输入 `/copy` 或 `/export`。复制和保存会先刷新尚未显示的流式文本。`/export` 会把当前可见对话保存到 workspace 内 `.traceforce/tui-transcript.txt`；这是剪贴板不可用时的可靠后备。模型错误的完整诊断保存到 `.traceforce/tui-error.txt`。这些文件被仓库忽略，但分享前仍应检查是否包含敏感信息。
 
 ```text
 /help       显示帮助
@@ -108,7 +108,7 @@ uv run python -m pytest -q
 uv build
 ```
 
-测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。当前离线测试数量为 49 项（以实际运行结果为准）。
+测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。当前离线测试数量为 55 项（以实际运行结果为准）。
 
 产品层不复制 Agent loop：`CodingAgent` 负责工具装配，循环、Session、Context 和生命周期事件由 [`traceforce-runtime`](../traceforce-runtime/README.md) 提供；Provider 协议由 [`traceforce-llm`](../traceforce-llm/README.md) 提供。
 

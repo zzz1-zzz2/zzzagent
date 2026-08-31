@@ -49,6 +49,10 @@ from traceforce.identity import (
 )
 
 
+_STREAM_TICK_SECONDS = 0.05
+_STREAM_CHARS_PER_TICK = 8
+
+
 class TaskInput(Input):
     """将终端多行粘贴内容安全合并为一条任务输入。"""
 
@@ -299,10 +303,19 @@ class TraceForceApp(App[None]):
     #body {
         height: 1fr;
     }
+    #body.compact {
+        layout: vertical;
+    }
     #main {
         width: 1fr;
         height: 1fr;
         padding: 0 1;
+    }
+    #activity {
+        width: 34;
+        min-width: 24;
+        height: 1fr;
+        padding: 0 1 1 0;
     }
     .transcript-actions {
         height: auto;
@@ -313,18 +326,35 @@ class TraceForceApp(App[None]):
         margin-left: 1;
     }
     #side {
-        width: 32;
-        min-width: 24;
+        height: auto;
+        max-height: 18;
         border: round #2d3a49;
         padding: 1;
-        margin: 0 1 1 0;
+        margin-bottom: 1;
         color: #9fb0c3;
+        overflow-y: auto;
     }
     #conversation {
         height: 1fr;
         border: round #2d3a49;
         padding: 1;
         scrollbar-size: 1 1;
+    }
+    #activity.compact {
+        width: 1fr;
+        height: 10;
+        min-width: 0;
+        padding: 0 1 1 1;
+        layout: horizontal;
+    }
+    #activity.compact #side {
+        width: 30;
+        max-height: 1fr;
+        margin: 0 1 0 0;
+    }
+    #activity.compact #cards {
+        width: 1fr;
+        height: 1fr;
     }
     .message-block {
         width: 1fr;
@@ -444,6 +474,11 @@ class TraceForceApp(App[None]):
         self._command_task: asyncio.Task[Any] | None = None
         self._current_cards: dict[str, ToolCard] = {}
         self._streaming_turn = False
+        self._stream_events_enabled = False
+        self._stream_buffer = ""
+        self._stream_flush_timer: Any = None
+        self._finish_stream_after_flush = False
+        self._compact_activity = False
         self._last_result: str | None = None
         self._status_text = "idle"
         self._permission_future: asyncio.Future[bool] | None = None
@@ -464,20 +499,41 @@ class TraceForceApp(App[None]):
                     Button("Save output", id="save-transcript"),
                     classes="transcript-actions",
                 )
-                yield Vertical(id="cards")
                 yield Label("idle", id="status")
                 yield TaskInput(
                     placeholder="Describe a coding task…  (Ctrl+C cancels running task)",
                     id="prompt",
                 )
-            yield Static(id="side", markup=False)
+            with Vertical(id="activity"):
+                yield Static(id="side", markup=False)
+                yield Vertical(id="cards")
         yield Footer()
+
+    def on_resize(self, event: Any) -> None:
+        """窄屏时把活动栏降到主区下方，保留工具卡片可达性。"""
+        compact = event.size.width <= 100
+        if compact == self._compact_activity:
+            return
+        self._compact_activity = compact
+        body = self.query_one("#body", Horizontal)
+        activity = self.query_one("#activity", Vertical)
+        if compact:
+            body.add_class("compact")
+            activity.add_class("compact")
+        else:
+            body.remove_class("compact")
+            activity.remove_class("compact")
 
     def on_mount(self) -> None:
         self._refresh_sidebar()
         self.query_one("#prompt", Input).focus()
+        self.on_resize(type("Resize", (), {"size": self.size})())
         if self.initial_task:
             self.call_after_refresh(self._submit_text, self.initial_task)
+
+    def on_unmount(self) -> None:
+        """卸载 TUI 时停止流式 timer，避免残留回调触碰已卸载控件。"""
+        self._discard_stream_buffer()
 
     def _refresh_sidebar(self) -> None:
         side = self.query_one("#side", Static)
@@ -527,11 +583,17 @@ class TraceForceApp(App[None]):
             self._last_result = await self.agent.run(text)
         except asyncio.CancelledError:
             self.agent.agent.abort()
+            self._discard_stream_buffer()
+            self._streaming_turn = False
             self._set_status("cancelled")
         except Exception as exc:
+            self._flush_pending_stream()
+            self._finish_stream_line()
             self._record_error(exc)
             self._set_status("error")
         else:
+            self._flush_pending_stream()
+            self._finish_stream_line()
             if self._status_text == "running":
                 if self._last_result is None:
                     self._set_status("stopped: max_iterations")
@@ -539,6 +601,7 @@ class TraceForceApp(App[None]):
                     self._set_status("idle")
         finally:
             self._run_task = None
+            self._stream_events_enabled = False
             self._streaming_turn = False
             self.query_one("#prompt", Input).focus()
 
@@ -695,6 +758,8 @@ class TraceForceApp(App[None]):
         return self.workspace / ".traceforce" / "tui-error.txt"
 
     def _copy_transcript(self) -> None:
+        self._flush_pending_stream()
+        self._finish_stream_line()
         transcript = self.query_one("#conversation", ConversationLog).transcript
         if transcript:
             self.copy_to_clipboard(transcript)
@@ -703,6 +768,8 @@ class TraceForceApp(App[None]):
             self._set_status("no output to copy")
 
     def _save_transcript(self) -> Path | None:
+        self._flush_pending_stream()
+        self._finish_stream_line()
         transcript = self.query_one("#conversation", ConversationLog).transcript
         if not transcript:
             self._set_status("no output to save")
@@ -737,6 +804,8 @@ class TraceForceApp(App[None]):
 
     def _copy_focused_selection(self) -> bool:
         """复制当前已有的 TextArea 选区，即使焦点刚回到输入框。"""
+        self._flush_pending_stream()
+        self._finish_stream_line()
         candidates: list[TextArea] = []
         focused = self.focused
         if isinstance(focused, TextArea):
@@ -771,47 +840,114 @@ class TraceForceApp(App[None]):
     def handle_event(self, event: Any) -> None:
         """同步接收 runtime hook 事件并更新 TUI。"""
         if isinstance(event, AgentStart):
+            self._stream_events_enabled = True
             self._set_status("starting")
         elif isinstance(event, TurnStart):
             self._streaming_turn = False
+            self._stream_events_enabled = True
             self._write_system(f"TURN {event.iteration}")
         elif isinstance(event, MessageUpdate):
+            if not self._stream_events_enabled:
+                return
             text = getattr(event.chunk, "content", "") or ""
             if text:
                 self._streaming_turn = True
-                self.query_one("#conversation", ConversationLog).assistant_chunk(text)
+                self._queue_stream_text(text)
                 self._set_status("assistant streaming")
         elif isinstance(event, ToolExecutionStart):
+            self._flush_pending_stream()
             self._finish_stream_line()
             card = ToolCard(event)
             self._current_cards[event.tool_call_id] = card
-            self.query_one("#cards", Vertical).mount(card)
+            self._mount_tool_card(card)
             self._set_status(f"running tool: {event.tool_name}")
         elif isinstance(event, ToolExecutionEnd):
+            self._flush_pending_stream()
             self._finish_stream_line()
             card = self._current_cards.get(event.tool_call_id)
             if card is not None and card.is_attached:
                 card.finish(event)
             self._set_status("tool error" if event.is_error else "tool complete")
         elif isinstance(event, TurnEnd):
+            self._flush_pending_stream()
             if event.message.content and not self._streaming_turn:
                 self.query_one("#conversation", ConversationLog).assistant_message(
                     event.message.content
                 )
             self._finish_stream_line()
+            self._stream_events_enabled = False
         elif isinstance(event, AgentEnd):
-            self._finish_stream_line()
+            if event.stop_reason == "cancelled":
+                self._discard_stream_buffer()
+                self._streaming_turn = False
+            else:
+                self._flush_pending_stream()
+                self._finish_stream_line()
+            self._stream_events_enabled = False
             self._set_status(f"{event.stop_reason} · {event.iterations} turns")
 
+    def _clear_view(self) -> None:
+        self._discard_stream_buffer()
+        self._streaming_turn = False
+        self.query_one("#conversation", ConversationLog).clear_transcript()
+        self.query_one("#cards", Vertical).remove_children()
+        self._current_cards.clear()
+
+    def _queue_stream_text(self, text: str) -> None:
+        """以可读的节奏批量刷新 assistant 文本，避免每个 token 抢占画面。"""
+        if not text:
+            return
+        self._stream_buffer += text
+        if self._stream_flush_timer is None:
+            self._stream_flush_timer = self.set_interval(
+                _STREAM_TICK_SECONDS, self._flush_stream_text
+            )
+
+    def _flush_stream_text(self) -> None:
+        """显示一个节拍的 assistant 文本，保持事件消费非阻塞。"""
+        if self._stream_buffer:
+            text = self._stream_buffer[:_STREAM_CHARS_PER_TICK]
+            self._stream_buffer = self._stream_buffer[len(text):]
+            self.query_one("#conversation", ConversationLog).assistant_chunk(text)
+        if not self._stream_buffer:
+            self._stop_stream_timer()
+            if self._finish_stream_after_flush:
+                self._finish_stream_after_flush = False
+                self._finish_stream_line()
+
+    def _flush_pending_stream(self) -> None:
+        """同步显示所有待处理文本，供事件边界和导出操作使用。"""
+        if self._stream_buffer:
+            self.query_one("#conversation", ConversationLog).assistant_chunk(
+                self._stream_buffer
+            )
+            self._stream_buffer = ""
+        self._finish_stream_after_flush = False
+        self._stop_stream_timer()
+
+    def _stop_stream_timer(self) -> None:
+        timer = self._stream_flush_timer
+        self._stream_flush_timer = None
+        if timer is not None:
+            timer.stop()
+
+    def _discard_stream_buffer(self) -> None:
+        """取消或清屏时丢弃尚未显示的文本，避免旧任务回调污染新视图。"""
+        self._stream_buffer = ""
+        self._finish_stream_after_flush = False
+        self._stop_stream_timer()
+
     def _finish_stream_line(self) -> None:
+        if self._stream_buffer:
+            self._finish_stream_after_flush = True
+            return
         if self._streaming_turn:
             self.query_one("#conversation", ConversationLog).finish_assistant()
             self._streaming_turn = False
 
-    def _clear_view(self) -> None:
-        self.query_one("#conversation", ConversationLog).clear_transcript()
-        self.query_one("#cards", Vertical).remove_children()
-        self._current_cards.clear()
+    def _mount_tool_card(self, card: ToolCard) -> None:
+        """把工具调用作为对话流中的一等卡片插入，而不是堆在输入框上。"""
+        self.query_one("#cards", Vertical).mount(card)
 
     def action_cancel_task(self) -> None:
         """合作式取消当前 Agent 任务，保留已完成的证据卡片。"""
@@ -819,6 +955,7 @@ class TraceForceApp(App[None]):
             if self.permission_controller is not None:
                 self.permission_controller.cancel()
         if self._run_task is None:
+            self._discard_stream_buffer()
             self._set_status("idle")
             return
         self._mark_running_cards_cancelled()
@@ -835,6 +972,7 @@ class TraceForceApp(App[None]):
         """取消任务、关闭当前扩展资源并退出应用。"""
         if self.permission_controller is not None:
             self.permission_controller.cancel()
+        self._discard_stream_buffer()
         task = self._run_task
         if task is not None:
             self._mark_running_cards_cancelled()

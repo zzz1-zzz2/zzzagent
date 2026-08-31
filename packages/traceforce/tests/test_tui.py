@@ -37,6 +37,7 @@ from traceforce.tui import (
     TraceForceApp,
     TUIPermissionController,
     TaskInput,
+    _STREAM_CHARS_PER_TICK,
 )
 
 
@@ -100,9 +101,13 @@ async def test_streaming_and_tool_events_render_cards(tmp_path: Path) -> None:
         app.handle_event(
             MessageUpdate(message=assistant, chunk=StreamChunk(content="lo"))
         )
+        conversation = app.query_one("#conversation", ConversationLog)
+        assert conversation.transcript == "SYSTEM\nTURN 1"
+        app._flush_stream_text()
+        assert conversation.transcript == "SYSTEM\nTURN 1\n\nASSISTANT\nhello"
         app.handle_event(ToolExecutionStart("tool-1", "read", {"path": "a.py"}))
         await pilot.pause()
-        card = app.query_one("#cards ToolCard", ToolCard)
+        card = app.query_one("#activity #cards ToolCard", ToolCard)
         assert card.title.startswith("RUNNING")
         assert card.query_one("#details", TextArea).text == '{"path":"a.py"}'
         app.handle_event(ToolExecutionEnd("tool-1", "read", "file contents", False))
@@ -112,6 +117,111 @@ async def test_streaming_and_tool_events_render_cards(tmp_path: Path) -> None:
         app.handle_event(TurnEnd(message=assistant, tool_results=[]))
         app.handle_event(AgentEnd([], "hello", 1, "end_turn"))
         assert app._status_text == "end_turn · 1 turns"
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_streaming_tick_is_bounded_and_agent_end_flushes(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    assistant = type("Assistant", (), {"content": ""})()
+    text = "x" * (_STREAM_CHARS_PER_TICK * 2 + 1)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(TurnStart(iteration=1))
+        app.handle_event(MessageUpdate(message=assistant, chunk=StreamChunk(content=text)))
+        conversation = app.query_one("#conversation", ConversationLog)
+        assert conversation.transcript == "SYSTEM\nTURN 1"
+        app._flush_stream_text()
+        assert conversation.transcript.endswith("ASSISTANT\n" + "x" * _STREAM_CHARS_PER_TICK)
+        app._flush_stream_text()
+        assert conversation.transcript.endswith("ASSISTANT\n" + "x" * (_STREAM_CHARS_PER_TICK * 2))
+        app.handle_event(AgentEnd([], text, 1, "end_turn"))
+        assert conversation.transcript.endswith("ASSISTANT\n" + text)
+        assert app._stream_buffer == ""
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_cancelled_agent_end_discards_pending_stream(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    assistant = type("Assistant", (), {"content": ""})()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(TurnStart(iteration=1))
+        app.handle_event(MessageUpdate(message=assistant, chunk=StreamChunk(content="discard")))
+        app.handle_event(AgentEnd([], None, 1, "cancelled"))
+        assert "discard" not in app.query_one("#conversation", ConversationLog).transcript
+        assert app._stream_buffer == ""
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_empty_chunk_and_non_streaming_turn_end_are_safe(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    assistant = type("Assistant", (), {"content": "fallback"})()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(TurnStart(iteration=1))
+        app.handle_event(MessageUpdate(message=assistant, chunk=StreamChunk(content="")))
+        app.handle_event(TurnEnd(message=assistant, tool_results=[]))
+        conversation = app.query_one("#conversation", ConversationLog)
+        assert conversation.transcript.endswith("ASSISTANT\nfallback")
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_stream_buffer_is_discarded_on_cancel_and_clear(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    assistant = type("Assistant", (), {"content": ""})()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(TurnStart(iteration=1))
+        app.handle_event(MessageUpdate(message=assistant, chunk=StreamChunk(content="stale")))
+        app.action_cancel_task()
+        assert app._stream_buffer == ""
+        app._flush_stream_text()
+        assert "stale" not in app.query_one("#conversation", ConversationLog).transcript
+        app.handle_event(TurnStart(iteration=2))
+        app.handle_event(MessageUpdate(message=assistant, chunk=StreamChunk(content="clear-me")))
+        app.action_clear_log()
+        assert app._stream_buffer == ""
+        app._flush_stream_text()
+        assert app.query_one("#conversation", ConversationLog).transcript == ""
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_transcript_copy_flushes_pending_stream(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    copied: list[str] = []
+    assistant = type("Assistant", (), {"content": ""})()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.handle_event(TurnStart(iteration=1))
+        app.handle_event(MessageUpdate(message=assistant, chunk=StreamChunk(content="pending")))
+        app.copy_to_clipboard = copied.append
+        app._copy_transcript()
+        assert copied == ["SYSTEM\nTURN 1\n\nASSISTANT\npending"]
+        assert app._stream_buffer == ""
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_activity_layout_mounts_on_wide_and_narrow_viewports(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    event = ToolExecutionStart("layout-tool", "read", {"path": "a.py"})
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        activity = app.query_one("#activity")
+        assert app.query_one("#activity #cards") is not None
+        app.handle_event(event)
+        await pilot.pause()
+        assert app.query_one("#activity #cards ToolCard", ToolCard)
+        await pilot.resize_terminal(80, 24)
+        await pilot.pause()
+        assert app.query_one("#body").has_class("compact")
+        assert activity.has_class("compact")
+        assert app.query_one("#activity #cards ToolCard", ToolCard)
         app.exit()
 
 
@@ -185,7 +295,7 @@ async def test_tool_card_clips_large_result(tmp_path: Path) -> None:
         await pilot.pause()
         app.handle_event(event)
         await pilot.pause()
-        card = app.query_one("#cards ToolCard", ToolCard)
+        card = app.query_one("#activity #cards ToolCard", ToolCard)
         card.finish(ToolExecutionEnd("x", "read", "x" * 3000, False))
         await pilot.pause()
         assert "clipped" in card.query_one("#details", TextArea).text
@@ -282,7 +392,7 @@ async def test_tool_card_can_close_without_affecting_task(tmp_path: Path) -> Non
         await pilot.pause()
         app.handle_event(event)
         await pilot.pause()
-        card = app.query_one("#cards ToolCard", ToolCard)
+        card = app.query_one("#activity #cards ToolCard", ToolCard)
         card.post_message(ToolCard.Closed(card))
         await pilot.pause()
         assert not app.query("#cards ToolCard")

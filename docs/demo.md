@@ -7,7 +7,7 @@
 1. 准备一个可丢弃的 demo workspace，不要使用包含隐私或生产凭据的项目；
 2. 确认 Python 3.11+、uv、Git 和目标模型 API 可用；
 3. 将 API key 放在未入库 `.env` 或环境变量中；
-4. 检查终端支持 OSC52（如需演示复制）；
+4. 检查终端支持 OSC52（如需演示复制）；`Copy output` 不可用时用 `/export`，并检查 `.traceforce/tui-transcript.txt` 与 `.traceforce/tui-error.txt` 是否包含敏感信息；
 5. 预先运行三包离线测试，保存真实输出；
 6. 如果演示评测任务，先运行 setup 和 TraceForce 介入前的初始状态检查。
 
@@ -57,7 +57,7 @@ uv run --project packages/traceforce traceforce \
   "先读取项目文件，再说明你准备如何验证一个小修改"
 ```
 
-现场可以展示：workspace、Session ID、模型流式输出，以及 Agent 如何先使用 `read` 再决定下一步。
+现场可以展示：workspace、Session ID、模型按可读节奏渐进显示的 assistant streaming，以及 Agent 如何先使用 `read` 再决定下一步。这里的展示节奏只属于 TUI，不改变 runtime 或模型生成速度。
 
 ### 3. 展示权限和工具循环
 
@@ -65,7 +65,7 @@ uv run --project packages/traceforce traceforce \
 
 - `read` 自动执行；
 - `write` / `edit` / `bash` 执行前出现确认；
-- 工具参数和结果在终端或 TUI 中可见；
+- 工具参数和结果在右侧活动栏（窄屏时位于主对话下方）可见；
 - bash 运行测试或检查，而不是只凭模型口头判断；
 - 错误结果回到模型后，模型继续修复。
 
@@ -81,12 +81,13 @@ uv run --project packages/traceforce traceforce \
 建议演示：
 
 1. 输入一个需要读取和检查的小任务；
-2. 展示 assistant streaming；
-3. 在权限弹窗中选择 Allow 或 Deny；
-4. 展开、折叠和复制工具详情；
-5. 关闭已完成的 ToolCard，说明关闭只影响可见 UI；
-6. 按 Ctrl+C 取消正在运行的任务；
-7. 用 `/session`、`/sessions` 和 `/clear` 展示 Session 交互。
+2. 展示按可读节奏渐进的 assistant streaming（这只影响 TUI 呈现，不改变 runtime 或模型生成速度）；
+3. 在右侧活动栏查看工具调用；窄屏时活动栏会降到主对话下方；
+4. 在权限弹窗中选择 Allow 或 Deny；
+5. 展开、折叠和复制工具详情；
+6. 关闭已完成的 ToolCard，说明关闭只影响可见 UI；
+7. 按 Ctrl+C 取消正在运行的任务；
+8. 用 `/session`、`/sessions` 和 `/clear` 展示 Session 交互。
 
 说明 TUI 不是另一套 Agent：它只是 runtime 事件的产品层消费者，Agent loop、workspace 边界和权限策略不因 `--tui` 改变。
 
@@ -118,7 +119,7 @@ evals/tasks/01-tqdm-bugfix/verify.sh
 - workspace 路径边界和权限确认；
 - 错误反馈、Session、Context、MCP 和 Textual TUI；
 - 三个任务定义、setup 和独立 verifier；
-- 313 项离线测试记录（以当前仓库实际运行结果为准）。
+- 319 项离线测试记录（以当前仓库实际运行结果为准）。
 
 ### 必须说明仍有限制
 

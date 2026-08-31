@@ -115,9 +115,9 @@ Textual TUI
   uv run --project packages/traceforce traceforce \
     --workspace /path/to/your-project --tui
 
-TUI 提供 workspace、Session 和 Agent 状态，assistant 流式输出，可选中复制的对话与工具详情，可折叠/复制/关闭的工具卡片，Allow/Deny 权限弹窗，以及任务输入多行粘贴支持。多行粘贴会把换行合并为空格，粘贴后仍需按 Enter 发送；若终端不支持 bracketed paste，可在启动命令末尾直接传入带引号的任务文本。
+TUI 提供 workspace、Session 和 Agent 状态，assistant 流式输出按可读节奏渐进显示（仅调整 TUI 展示，不改变 runtime 或模型生成速度），并将工具调用放在独立活动栏：宽屏显示在右侧，窄屏降级到下方活动区。对话和工具详情可选中复制；工具卡片支持展开、折叠、复制和关闭，关闭只影响可见 UI，不取消底层工具执行。任务输入支持终端多行粘贴：换行会合并为空格，粘贴后仍需按 Enter 发送；若终端不支持 bracketed paste，可在启动命令末尾直接传入带引号的任务文本。
 
-输出区提供 Copy output、Save output 按钮，也可以使用 /copy 和 /export。/export 将当前可见对话保存到 workspace/.traceforce/tui-transcript.txt；模型错误的完整诊断保存到 workspace/.traceforce/tui-error.txt。分享前必须检查这些文件是否包含敏感内容。
+输出区提供 Copy output、Save output 按钮，也可以使用 /copy 和 /export。/export 将当前可见对话保存到 workspace/.traceforce/tui-transcript.txt；模型错误的完整诊断保存到 workspace/.traceforce/tui-error.txt。复制会先刷新尚未显示的流式文本；剪贴板依赖终端 OSC52，/export 和 tui-transcript.txt 是可靠后备。错误诊断和导出文件分享前必须检查是否包含敏感信息。
 
 常用命令和快捷键：
 
@@ -185,7 +185,7 @@ Before TraceForce / After TraceForce
     (cd "packages/$package" && uv lock --check && uv run python -m pytest -q && uv build)
   done
 
-记录的离线测试数量：traceforce-llm 36 项，traceforce-runtime 228 项，traceforce 49 项，共 313 项。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
+记录的离线测试数量：traceforce-llm 36 项，traceforce-runtime 228 项，traceforce 55 项，共 319 项。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
 
 测试统计不等于真实 API E2E、浏览器人工验收或发布证据；这些内容必须单独记录，不能虚构。
 

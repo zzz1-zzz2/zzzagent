@@ -5,7 +5,7 @@
 > **由 zzz 开发** · GitHub：[zzz1-zzz2/zzzagent](https://github.com/zzz1-zzz2/zzzagent)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-313%20passed-2ea44f)](#测试与验收)
+[![Tests](https://img.shields.io/badge/tests-319%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
 TraceForce 是由 **zzz** 开发的、可以实际读取项目、修改文件、执行检查并根据结果继续修复的 Coding Agent。它不是只返回建议的聊天窗口，也不依赖现成 Agent 编排框架或 Agent SDK；模型适配、工具调用循环、上下文视图、Session、权限和产品交互都在本仓库中实现。
@@ -49,6 +49,10 @@ TraceForce 是由 **zzz** 开发的、可以实际读取项目、修改文件、
 ---
 
 ## 架构：Product → Runtime → LLM
+
+![TraceForce 的 Product、Runtime、LLM 与独立评测分层](docs/assets/traceforce-architecture.png)
+
+*图 1：TraceForce 的产品层、通用运行时和模型协议边界；`evals` 位于运行时之外，负责独立验收。*
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -217,7 +221,8 @@ uv run --project packages/traceforce traceforce \
 TUI 提供：
 
 - workspace、Session 和 Agent 状态展示；
-- assistant 流式输出；
+- assistant 流式输出按可读节奏渐进显示（仅调整 TUI 展示，不改变 runtime 或模型生成速度）；
+- 工具调用显示在独立的右侧活动栏，宽屏与主对话并排，窄屏降级到下方活动区；
 - 可选中复制的对话和工具详情；
 - 可折叠、可复制、可关闭的工具卡片；
 - Allow/Deny 异步权限弹窗；
@@ -227,7 +232,7 @@ TUI 提供：
 - `/help`、`/session`、`/sessions`、`/clear`、`/mcp`、`/exit`；
 - Ctrl+C 取消当前任务，Ctrl+Shift+C 复制选区，Ctrl+L 清除可见日志，Ctrl+Q 退出。
 
-已完成的工具卡片默认折叠；关闭只影响可见 UI，不取消底层工具调用。剪贴板复制能力取决于终端 OSC52 支持；任务粘贴能力取决于终端是否发送 bracketed paste 事件。
+已完成的工具卡片默认折叠；工具活动栏在宽终端位于右侧，窄终端会降到主对话下方；卡片支持展开、折叠、复制详情和关闭，关闭只影响可见 UI，不取消底层工具调用。assistant streaming 只改变 TUI 的展示节奏，不改变 runtime 或模型生成速度。剪贴板复制依赖终端 OSC52 支持；`/export` 和 `.traceforce/tui-transcript.txt` 是可靠后备。任务粘贴能力取决于终端是否发送 bracketed paste 事件；不支持时可使用带引号的任务参数。错误诊断和导出文件分享前仍须人工检查敏感信息。
 
 ---
 
@@ -236,6 +241,10 @@ TUI 提供：
 ### Agent loop
 
 TraceForce 自己实现了以下循环，不把控制流交给 Agent 编排框架：
+
+![TraceForce Agent 循环、工具执行、错误反馈与终止路径](docs/assets/traceforce-agent-loop.png)
+
+*图 2：模型请求工具时进入本地执行并把结果反馈给下一轮；无工具调用或达到迭代上限时终止。*
 
 ```text
 UserInput
@@ -316,6 +325,10 @@ TraceForce 会通过异步 stdio 连接 MCP server，将远程工具转换为 ru
 
 `evals/` 只负责定义“如何证明实现有效”，不复制 Agent loop、工具实现或 Session。每个任务遵循：
 
+![TraceForce 从固定初始状态到独立验证和证据收集的评测闭环](docs/assets/traceforce-evaluation.png)
+
+*图 3：评测从固定缺陷版本或空工作区开始，由 Agent 外部的 verifier 给出最终判定，并保留测试、构建和差异证据。*
+
 ```text
 Prepare → Initial verification → Run TraceForce → Final verification → Collect Evidence → Reset
 ```
@@ -354,8 +367,8 @@ done
 
 - `traceforce-llm`：36 项；
 - `traceforce-runtime`：228 项；
-- `traceforce`：49 项；
-- 合计：313 项。
+- `traceforce`：55 项；
+- 合计：319 项。
 
 测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。测试覆盖 Provider 归一化、流式 tool-call 聚合、Agent loop、Tool Schema、错误反馈、Hook、Session、Context、扩展、文件工具、MCP、CLI 和 TUI。
 
