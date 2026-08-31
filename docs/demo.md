@@ -93,6 +93,14 @@ uv run --project packages/traceforce traceforce \
 
 ### 5. 展示可复现评测
 
+先用简短、具体的语言说明三个任务分别在检验什么：
+
+1. **tqdm 真实仓库 Bugfix**：旧版本 `tenumerate` 会把调用方传入的非零 `start` 错误地传给进度条构造函数。比如 `tenumerate(range(3), 42)` 本应得到从 42 开始的编号，初始版本却会触发类型错误。任务要求 Agent 阅读真实仓库、定位参数传递问题，以最小修改恢复起始值语义，并通过项目测试和独立行为断言。
+2. **Sanic 真实仓库 Bugfix**：Blueprint 中按 `one → two → three` 声明的 response middleware，按照框架的响应阶段语义应以 `three → two → one` 的顺序执行；固定旧版本却按声明顺序注册，破坏了中间件的包裹语义。任务要求 Agent 阅读 Blueprint 注册链路，修复顺序，同时保持现有 API 和 request middleware 行为。
+3. **DevBoard 从零开发**：从完全空白的 workspace 创建一个原生 HTML、CSS、JavaScript 项目，不使用框架、构建工具、包管理器、CDN 或远程资源。页面需要展示 repository 健康状态，具备清晰视觉层级、响应式布局和至少一个真实交互。独立 verifier 检查静态文件、本地引用、响应式规则与交互脚本，最终再通过浏览器检查视觉质量。
+
+这三个任务分别覆盖“真实项目中的局部 API 修复”“需要理解框架语义的注册逻辑修复”和“从需求到可运行交付物的完整开发”。演示时不要只念任务名称，应先展示初始失败，再说明 Agent 要达到的可验证结果。
+
 选择一个任务，按协议演示：
 
 ```bash
@@ -106,7 +114,7 @@ evals/tasks/01-tqdm-bugfix/verify.sh  # 初始状态应失败
 evals/tasks/01-tqdm-bugfix/verify.sh
 ```
 
-最后展示 verifier 的 PASS/FAIL，而不是只展示 Agent 的最终总结。任务 03 还需要浏览器人工检查桌面和窄屏布局；shell verifier 只判断 package manifest 和 production build。
+最后展示 verifier 的 PASS/FAIL，而不是只展示 Agent 的最终总结。任务 03 还需要浏览器人工检查桌面和窄屏布局；shell verifier 只判断静态文件、响应式样式和交互脚本等机器可验证契约。
 
 ## 答辩时的诚实表述
 

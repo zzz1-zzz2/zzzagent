@@ -136,7 +136,7 @@ Setup → Before Verify → Run TraceForce → After Verify → Evidence → Res
 | --- | --- | --- |
 | [01 — tqdm bugfix](evals/tasks/01-tqdm-bugfix/) | 真实 Python 仓库 API 回归 | 定向 pytest + 行为断言 |
 | [02 — Sanic bugfix](evals/tasks/02-sanic-bugfix/) | 真实框架 middleware 顺序错误 | registry 顺序断言 |
-| [03 — DevBoard](evals/tasks/03-devboard-greenfield/) | 空 workspace 创建 React + Vite 项目 | production build + 人工 UI 验收 |
+| [03 — DevBoard](evals/tasks/03-devboard-greenfield/) | 空 workspace 创建原生静态网页 | 静态契约检查 + 人工 UI 验收 |
 
 以任务 01 为例：
 

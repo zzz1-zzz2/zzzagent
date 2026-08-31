@@ -27,14 +27,14 @@ Prepare → Initial verification → Run TraceForce → Final verification → C
 | --- | --- | --- |
 | 任务 01 tqdm | buggy revision；目标行为检查失败 | 目标行为恢复；独立 verifier 通过 |
 | 任务 02 Sanic | middleware 顺序错误；独立检查失败 | middleware 顺序正确；独立 verifier 通过 |
-| 任务 03 DevBoard | 空 workspace；`package.json` 不存在 | React + Vite 项目生成；production build 通过，另做人工 UI 验收 |
+| 任务 03 DevBoard | 空 workspace；静态页面不存在 | 原生 HTML/CSS/JS 页面生成；静态 verifier 通过，另做人工 UI 验收 |
 
 因此评测要证明的是同一个任务的 `Initial state → TraceForce → Final state`，不包含第二个 Agent，也不要求排行榜式的竞品对照。
 | 任务 | 覆盖内容 | Workspace | 独立验证 |
 | --- | --- | --- | --- |
 | [01 — tqdm bugfix](tasks/01-tqdm-bugfix/) | 现有 Python 仓库中的简单 API 回归修复 | `evals/workspaces/01-tqdm-bugfix/` | 定向 pytest 与独立行为断言 |
 | [02 — Sanic bugfix](tasks/02-sanic-bugfix/) | 仓库代码阅读和 middleware 顺序语义修复 | `evals/workspaces/02-sanic-bugfix/` | 独立 blueprint middleware 注册顺序检查 |
-| [03 — DevBoard greenfield](tasks/03-devboard-greenfield/) | 从空 workspace 创建小型前端项目 | `evals/workspaces/03-devboard-greenfield/` | package/build 检查和人工 UI 验收 |
+| [03 — DevBoard greenfield](tasks/03-devboard-greenfield/) | 从空 workspace 创建原生静态前端 | `evals/workspaces/03-devboard-greenfield/` | 静态文件、响应式与交互检查和人工 UI 验收 |
 
 前两个任务使用公开上游仓库的固定 buggy commit。它们的 setup 脚本只会在运行时 clone 对应仓库并 checkout 指定 revision，第三方完整源码不会提交到当前仓库。第三个任务从真正的空目录开始。
 

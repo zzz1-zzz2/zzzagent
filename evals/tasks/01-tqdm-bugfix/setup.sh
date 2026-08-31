@@ -8,8 +8,24 @@ source_repo="https://github.com/tqdm/tqdm.git"
 
 rm -rf -- "${workspace}"
 mkdir -p -- "$(dirname -- "${workspace}")"
-git clone --quiet --no-tags "${source_repo}" "${workspace}"
-git -C "${workspace}" checkout --quiet --detach "${revision}"
+git init --quiet "${workspace}"
+git -C "${workspace}" remote add origin "${source_repo}"
+
+# The evaluation is pinned to one commit, so avoid downloading the repository's
+# complete history. HTTP/1.1 is more reliable through common local proxies, and
+# a short retry loop makes the recording setup resilient to transient drops.
+for attempt in 1 2 3; do
+  if git -C "${workspace}" -c http.version=HTTP/1.1 fetch \
+    --quiet --no-tags --depth=1 origin "${revision}"; then
+    break
+  fi
+  if [[ "${attempt}" == 3 ]]; then
+    printf 'Failed to fetch tqdm revision after %s attempts.\n' "${attempt}" >&2
+    exit 1
+  fi
+  printf 'Fetch interrupted; retrying (%s/3)...\n' "$((attempt + 1))" >&2
+done
+git -C "${workspace}" checkout --quiet --detach FETCH_HEAD
 
 # Keep the generated checkout focused on the task and avoid carrying local state.
 git -C "${workspace}" clean -fdx --quiet

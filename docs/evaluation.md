@@ -54,7 +54,7 @@ Agent 完成后再次执行 `verify.sh`。verifier 必须独立读取 workspace 
 | --- | --- | --- |
 | 任务 01 tqdm | buggy revision；目标行为检查失败 | 目标行为恢复；独立 verifier 通过 |
 | 任务 02 Sanic | middleware 顺序错误；独立检查失败 | middleware 顺序正确；独立 verifier 通过 |
-| 任务 03 DevBoard | 空 workspace；`package.json` 不存在 | React + Vite 项目生成；production build 通过，并完成人工 UI 验收 |
+| 任务 03 DevBoard | 空 workspace；静态页面不存在 | 原生 HTML/CSS/JS 页面生成；静态 verifier 通过，并完成人工 UI 验收 |
 
 本项目只有一个被测 Agent：TraceForce。这里不引入第二个 Agent，也不做竞品排行榜；证据链是 `Initial state → TraceForce → Final state`。
 
@@ -63,7 +63,7 @@ Agent 完成后再次执行 `verify.sh`。verifier 必须独立读取 workspace 
 | --- | --- | --- | --- |
 | [01 — tqdm bugfix](../evals/tasks/01-tqdm-bugfix/) | 修复 `tenumerate` 非零起始值语义 | 定向 pytest + 独立行为断言 | 修改范围和测试证据 |
 | [02 — Sanic bugfix](../evals/tasks/02-sanic-bugfix/) | 恢复 Blueprint response middleware 顺序 | 独立 registry 顺序检查 | 仓库推理过程和 patch |
-| [03 — DevBoard greenfield](../evals/tasks/03-devboard-greenfield/) | 从空目录创建 React + Vite DevBoard | `package.json`、build script、`npm run build` | 浏览器中的桌面/窄屏 UI 验收 |
+| [03 — DevBoard greenfield](../evals/tasks/03-devboard-greenfield/) | 从空目录创建原生静态 DevBoard | 静态文件、本地资源、响应式样式与交互脚本 | 浏览器中的桌面/窄屏 UI 验收 |
 
 任务 01/02 在运行时 clone 公开上游仓库并 checkout 固定 buggy commit；任务 03 从真正空目录开始。机器 verifier 和人工验收分别记录，不把视觉质量伪装成 shell 能完整判断的契约。
 

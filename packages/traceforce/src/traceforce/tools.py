@@ -13,7 +13,10 @@ from traceforce_runtime.tools import Tool, ToolResult  # pyright: ignore[reportM
 
 from traceforce.mutation_queue import FileMutationQueue
 
-_TIMEOUT_SECONDS = 120
+# Dependency installation and production builds can legitimately take several
+# minutes on a cold cache or a slow registry connection. The process still runs
+# without stdin and is terminated as a process group when this bound is reached.
+_TIMEOUT_SECONDS = 600
 _DANGEROUS = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
 _NON_INTERACTIVE_ENV = {
     "CI": "1",

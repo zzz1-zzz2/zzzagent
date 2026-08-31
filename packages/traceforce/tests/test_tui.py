@@ -104,9 +104,10 @@ async def test_streaming_and_tool_events_render_cards(tmp_path: Path) -> None:
         conversation = app.query_one("#conversation", ConversationLog)
         assert conversation.transcript == "SYSTEM\nTURN 1"
         app._flush_stream_text()
-        assert conversation.transcript == "SYSTEM\nTURN 1\n\nASSISTANT\nhello"
+        assert conversation.transcript == "SYSTEM\nTURN 1\n\nASSISTANT\nhell"
         app.handle_event(ToolExecutionStart("tool-1", "read", {"path": "a.py"}))
         await pilot.pause()
+        assert conversation.transcript == "SYSTEM\nTURN 1\n\nASSISTANT\nhello"
         card = app.query_one("#activity #cards ToolCard", ToolCard)
         assert card.title.startswith("RUNNING")
         assert card.query_one("#details", TextArea).text == '{"path":"a.py"}'
@@ -115,6 +116,7 @@ async def test_streaming_and_tool_events_render_cards(tmp_path: Path) -> None:
         assert card.title.startswith("DONE")
         assert "file contents" in card.query_one("#details", TextArea).text
         app.handle_event(TurnEnd(message=assistant, tool_results=[]))
+        assert conversation.transcript.count("ASSISTANT\nhello") == 1
         app.handle_event(AgentEnd([], "hello", 1, "end_turn"))
         assert app._status_text == "end_turn · 1 turns"
         app.exit()

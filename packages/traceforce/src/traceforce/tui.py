@@ -49,8 +49,8 @@ from traceforce.identity import (
 )
 
 
-_STREAM_TICK_SECONDS = 0.05
-_STREAM_CHARS_PER_TICK = 8
+_STREAM_TICK_SECONDS = 0.08
+_STREAM_CHARS_PER_TICK = 4
 
 
 class TaskInput(Input):
@@ -171,11 +171,10 @@ class ConversationLog(TextArea):
     def start_assistant(self) -> None:
         """开始一条可增量更新的 assistant 消息。"""
         self._finish_assistant()
-        if self._transcript:
-            self._transcript += "\n\n"
-        self._transcript += "ASSISTANT\n"
+        prefix = "\n\n" if self._transcript else ""
+        prefix += "ASSISTANT\n"
+        self._append_text(prefix)
         self._assistant_open = True
-        self._refresh_text()
 
     def assistant_chunk(self, text: str) -> None:
         """把 token 追加到当前 assistant 消息，而不是制造大量孤立控件。"""
@@ -183,8 +182,7 @@ class ConversationLog(TextArea):
             return
         if not self._assistant_open:
             self.start_assistant()
-        self._transcript += text
-        self._refresh_text()
+        self._append_text(text)
 
     def assistant_message(self, text: str) -> None:
         """渲染非流式模型返回的完整 assistant 消息。"""
@@ -208,13 +206,15 @@ class ConversationLog(TextArea):
         self.load_text("")
 
     def _append_block(self, text: str) -> None:
-        if self._transcript:
-            self._transcript += "\n\n"
-        self._transcript += text
-        self._refresh_text()
+        prefix = "\n\n" if self._transcript else ""
+        self._append_text(prefix + text)
 
-    def _refresh_text(self) -> None:
-        self.load_text(self._transcript)
+    def _append_text(self, text: str) -> None:
+        """仅在文档末尾插入新增内容，避免流式输出触发全屏重绘。"""
+        if not text:
+            return
+        self._transcript += text
+        self.insert(text, self.document.end, maintain_selection_offset=False)
         self.scroll_end(animate=False)
 
     def _finish_assistant(self) -> None:
@@ -474,6 +474,7 @@ class TraceForceApp(App[None]):
         self._command_task: asyncio.Task[Any] | None = None
         self._current_cards: dict[str, ToolCard] = {}
         self._streaming_turn = False
+        self._turn_had_streamed_text = False
         self._stream_events_enabled = False
         self._stream_buffer = ""
         self._stream_flush_timer: Any = None
@@ -844,6 +845,7 @@ class TraceForceApp(App[None]):
             self._set_status("starting")
         elif isinstance(event, TurnStart):
             self._streaming_turn = False
+            self._turn_had_streamed_text = False
             self._stream_events_enabled = True
             self._write_system(f"TURN {event.iteration}")
         elif isinstance(event, MessageUpdate):
@@ -852,6 +854,7 @@ class TraceForceApp(App[None]):
             text = getattr(event.chunk, "content", "") or ""
             if text:
                 self._streaming_turn = True
+                self._turn_had_streamed_text = True
                 self._queue_stream_text(text)
                 self._set_status("assistant streaming")
         elif isinstance(event, ToolExecutionStart):
@@ -870,7 +873,7 @@ class TraceForceApp(App[None]):
             self._set_status("tool error" if event.is_error else "tool complete")
         elif isinstance(event, TurnEnd):
             self._flush_pending_stream()
-            if event.message.content and not self._streaming_turn:
+            if event.message.content and not self._turn_had_streamed_text:
                 self.query_one("#conversation", ConversationLog).assistant_message(
                     event.message.content
                 )
@@ -889,6 +892,7 @@ class TraceForceApp(App[None]):
     def _clear_view(self) -> None:
         self._discard_stream_buffer()
         self._streaming_turn = False
+        self._turn_had_streamed_text = False
         self.query_one("#conversation", ConversationLog).clear_transcript()
         self.query_one("#cards", Vertical).remove_children()
         self._current_cards.clear()
