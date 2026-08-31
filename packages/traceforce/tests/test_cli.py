@@ -43,6 +43,7 @@ def test_product_identity_is_visible_in_prompt_and_help(capsys):
     assert PRODUCT_NAME in DEFAULT_SYSTEM_PROMPT
     assert DEVELOPER_NAME in DEFAULT_SYSTEM_PROMPT
     assert PURPOSE in DEFAULT_SYSTEM_PROMPT
+    assert "始终使用简体中文与用户交流" in DEFAULT_SYSTEM_PROMPT
     assert TAGLINE in build_parser().description
     assert DEVELOPER_HANDLE in build_parser().epilog
     assert WORKFLOW
