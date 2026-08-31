@@ -12,7 +12,7 @@ TraceForce 是由 zzz 独立开发的、面向真实软件工程任务的 Coding
 
 安装
 ----
-环境要求：Python 3.11+、uv，以及一个兼容的模型 API。
+运行 TraceForce 本身需要 Python 3.11+、uv，以及一个兼容的模型 API。运行 evals/ 中的完整评测还需要 Git 和 GitHub 网络访问（任务 01/02 会动态准备上游仓库）、Node.js、npm、npm registry 网络访问，以及用于任务 03 人工 UI 验收的 Chrome、Firefox 或其他浏览器。评测 setup 脚本会把任务专用 Python 依赖安装到生成 workspace 内的 .eval-venv，不会修改宿主机的全局 Python 环境。TraceForce 可以创建和配置项目级环境，但不会替宿主机安装 Python、Node.js、npm 或系统包。
 
 在仓库中分别安装三个包：
 

@@ -8,7 +8,7 @@
 [![Tests](https://img.shields.io/badge/tests-309%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
-TraceForce 是由 **zzz** 独立开发的、面向真实软件工程任务的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
+TraceForce 是由 **zzz** 开发的、面向真实软件工程任务的 Coding Agent。它不只是对话窗口，也不依赖现成的 Agent 框架或 Agent SDK，而是自己实现了模型适配、工具调用循环、文件操作、命令执行、权限确认、上下文管理、会话持久化和验证反馈。
 
 它的目标是让模型真正参与软件工程工作：
 
@@ -136,9 +136,20 @@ TraceForce 由三个独立 Python 包组成：
 
 ### 环境要求
 
+运行 TraceForce 本身需要：
+
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/)
 - 一个兼容的模型 API
+
+运行 `evals/` 中的完整评测还需要：
+
+- Git，以及能够访问 GitHub 的网络环境（任务 01/02 会动态准备上游仓库）；
+- Node.js 和 npm（任务 03 的 React + Vite greenfield 项目）；
+- 能够访问 npm registry 的网络环境（安装前端依赖）；
+- Chrome、Firefox 或其他浏览器（任务 03 的人工 UI 验收，机器 verifier 不依赖浏览器）。
+
+评测 setup 脚本会把任务专用 Python 依赖安装到生成 workspace 内的 `.eval-venv`，不会修改宿主机的全局 Python 环境。TraceForce 可以创建和配置项目级环境，但不会替宿主机安装 Python、Node.js、npm 或系统包。
 
 ### 安装
 

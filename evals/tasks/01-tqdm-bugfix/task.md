@@ -1,7 +1,7 @@
-# Task 01: fix `tenumerate` start semantics
+# 任务 01：修复 `tenumerate` 的起始值语义
 
-TraceForce is working in an older checkout of the `tqdm` project. The focused contributor test currently exposes a regression in the public `tqdm.contrib.tenumerate` helper when callers provide a non-zero starting value.
+TraceForce 当前运行在较旧版本的 `tqdm` 项目 checkout 上。项目公开的 `tqdm.contrib.tenumerate` 辅助函数在调用方传入非零起始值时存在回归问题。
 
-Inspect the implementation and the surrounding tests and make the smallest production change that restores the documented behavior. Preserve the existing behavior for the default start value and for supported optional arguments. Run the focused test, and run any additional local checks needed to gain confidence in the change.
+请阅读相关实现、周边测试和项目约定，找出问题原因，并用最小必要的生产代码修改恢复正确行为。需要保留默认起始值和其他已支持可选参数的现有行为。请运行定向测试，并根据需要补充其他本地检查，以确认修改有效。
 
-Do not modify the evaluation scripts or use a reference patch. The final result should be a clean, maintainable fix in the generated repository workspace, accompanied by evidence from the project's own test tooling.
+不要修改评测脚本，也不要使用 reference patch。最终应在生成的项目 workspace 中留下一个简洁、可维护的修复，并提供项目自身测试工具产生的验证证据。

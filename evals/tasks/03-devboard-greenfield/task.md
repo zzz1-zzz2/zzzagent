@@ -1,9 +1,9 @@
-# Task 03: build the DevBoard frontend
+# 任务 03：从零创建 DevBoard 前端
 
-Starting from an empty workspace, create a small, polished DevBoard frontend for a developer who needs to scan project health quickly.
+请从一个空 workspace 开始，为需要快速查看项目健康状况的开发者创建一个小型、完整且有打磨感的 DevBoard 前端。
 
-Use a modern React + Vite setup with a package manifest and a production build script. The page should communicate a coherent product concept rather than being a placeholder: include a clear dashboard title, project or repository health at a glance, useful status information, and a focused layout that works at both desktop and narrow viewport widths. Choose a consistent visual system and make the primary content easy to scan.
+使用现代 React + Vite 方案，提供 package manifest 和生产构建脚本。页面不应只是 placeholder，而应表达清晰的产品概念：包含明确的 dashboard 标题、项目或 repository 的整体健康状态、实用的状态信息，以及便于快速浏览的布局。请保持视觉系统一致，并确保桌面端和窄屏视口都能正常使用。
 
-The generated workspace must remain self-contained and runnable with the package manager. Install the declared dependencies, run the production build, and inspect the result in a browser or equivalent UI preview before reporting completion. Do not modify the evaluation scripts or add dependencies that are not declared in the workspace manifest.
+生成的 workspace 必须能够通过 package manager 独立运行。请安装 manifest 中声明的依赖，执行生产构建，并在报告完成前通过浏览器或等效的 UI 预览检查页面。不要修改评测脚本，也不要添加 workspace manifest 未声明的依赖。
 
-The independent verifier checks the machine-testable contract (`package.json`, a build script, and a successful production build). Visual quality and usability are part of the manual review evidence, not something the shell script can fully judge.
+独立 verifier 只检查机器可验证的契约：`package.json`、build script 和成功的 production build。视觉质量和可用性属于人工验收证据，shell 脚本无法完整判断。
