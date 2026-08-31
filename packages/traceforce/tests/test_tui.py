@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from textual.events import Paste
 from textual.widgets import TextArea
 from traceforce_llm import Response, StreamChunk
 from traceforce_runtime.events import (
@@ -35,6 +36,7 @@ from traceforce.tui import (
     ToolCard,
     TraceForceApp,
     TUIPermissionController,
+    TaskInput,
 )
 
 
@@ -205,6 +207,72 @@ async def test_conversation_is_selectable_and_copyable(tmp_path: Path) -> None:
         assert "copy this text" in copied[0]
         app.exit()
 
+
+@pytest.mark.anyio
+async def test_task_input_merges_multiline_paste_without_submitting(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.query_one("#prompt", TaskInput)
+        prompt.post_message(Paste("第一行\r\n第二行\n第三行"))
+        await pilot.pause()
+        assert prompt.value == "第一行 第二行 第三行"
+        assert app._run_task is None
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_task_input_paste_preserves_existing_cursor_position(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.query_one("#prompt", TaskInput)
+        prompt.value = "beforeafter"
+        prompt.cursor_position = 6
+        prompt.post_message(Paste(" middle "))
+        await pilot.pause()
+        assert prompt.value == "before middle after"
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_transcript_can_be_copied_and_saved(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    copied: list[str] = []
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        conversation = app.query_one("#conversation", ConversationLog)
+        conversation.append_block("SYSTEM", "visible error")
+        original_transcript = conversation.transcript
+        app.copy_to_clipboard = copied.append
+        app._copy_transcript()
+        path = app._save_transcript()
+        assert copied == [original_transcript]
+        assert path is not None
+        assert path.read_text(encoding="utf-8").strip() == original_transcript
+        app.exit()
+
+
+@pytest.mark.anyio
+async def test_agent_error_is_visible_and_saved(tmp_path: Path) -> None:
+    class FailingLLM:
+        async def achat_stream(self, *, messages, tools=None, **kwargs):
+            del messages, tools, kwargs
+            raise RuntimeError("model unavailable")
+            yield  # pragma: no cover
+
+    app = make_app(tmp_path, llm=FailingLLM())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app._submit_text("trigger error")
+        for _ in range(5):
+            await pilot.pause()
+        conversation = app.query_one("#conversation", ConversationLog)
+        assert "RuntimeError: model unavailable" in conversation.transcript
+        error_path = tmp_path / ".traceforce" / "tui-error.txt"
+        assert error_path.is_file()
+        assert "RuntimeError: model unavailable" in error_path.read_text(encoding="utf-8")
+        app.exit()
 
 @pytest.mark.anyio
 async def test_tool_card_can_close_without_affecting_task(tmp_path: Path) -> None:

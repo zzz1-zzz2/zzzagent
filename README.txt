@@ -115,7 +115,9 @@ Textual TUI
   uv run --project packages/traceforce traceforce \
     --workspace /path/to/your-project --tui
 
-TUI 提供 workspace、Session 和 Agent 状态，assistant 流式输出，可选中复制的对话与工具详情，可折叠/复制/关闭的工具卡片，Allow/Deny 权限弹窗，以及任务取消和 Session 命令。
+TUI 提供 workspace、Session 和 Agent 状态，assistant 流式输出，可选中复制的对话与工具详情，可折叠/复制/关闭的工具卡片，Allow/Deny 权限弹窗，以及任务输入多行粘贴支持。多行粘贴会把换行合并为空格，粘贴后仍需按 Enter 发送；若终端不支持 bracketed paste，可在启动命令末尾直接传入带引号的任务文本。
+
+输出区提供 Copy output、Save output 按钮，也可以使用 /copy 和 /export。/export 将当前可见对话保存到 workspace/.traceforce/tui-transcript.txt；模型错误的完整诊断保存到 workspace/.traceforce/tui-error.txt。分享前必须检查这些文件是否包含敏感内容。
 
 常用命令和快捷键：
 
@@ -123,6 +125,8 @@ TUI 提供 workspace、Session 和 Agent 状态，assistant 流式输出，可�
   /session    显示当前 workspace 和 Session ID
   /sessions   列出已保存 Session
   /clear      清空当前会话
+  /copy       复制完整可见对话
+  /export     保存完整可见对话
   /mcp        显示 MCP 服务状态
   /exit       退出
   Ctrl+C      无选区时取消任务
@@ -130,7 +134,7 @@ TUI 提供 workspace、Session 和 Agent 状态，assistant 流式输出，可�
   Ctrl+L      清除可见日志
   Ctrl+Q      退出 TUI
 
-工具卡片完成后默认折叠；关闭只影响可见 UI，不取消底层工具调用。剪贴板能力取决于终端 OSC52 支持。需要交互输入的命令不会获得 TUI stdin，应使用 --yes、-y 或 --no-input 等非交互参数。
+工具卡片完成后默认折叠；关闭只影响可见 UI，不取消底层工具调用。剪贴板复制能力取决于终端 OSC52 支持；任务粘贴能力取决于终端是否发送 bracketed paste 事件。需要交互输入的命令不会获得 TUI stdin，应使用 --yes、-y 或 --no-input 等非交互参数。
 
 Session
 -------
@@ -181,7 +185,7 @@ Before TraceForce / After TraceForce
     (cd "packages/$package" && uv lock --check && uv run python -m pytest -q && uv build)
   done
 
-记录的离线测试数量：traceforce-llm 36 项，traceforce-runtime 228 项，traceforce 45 项，共 309 项。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
+记录的离线测试数量：traceforce-llm 36 项，traceforce-runtime 228 项，traceforce 49 项，共 313 项。测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。
 
 测试统计不等于真实 API E2E、浏览器人工验收或发布证据；这些内容必须单独记录，不能虚构。
 

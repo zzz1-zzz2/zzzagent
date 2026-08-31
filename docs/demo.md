@@ -118,7 +118,7 @@ evals/tasks/01-tqdm-bugfix/verify.sh
 - workspace 路径边界和权限确认；
 - 错误反馈、Session、Context、MCP 和 Textual TUI；
 - 三个任务定义、setup 和独立 verifier；
-- 309 项离线测试记录（以当前仓库实际运行结果为准）。
+- 313 项离线测试记录（以当前仓库实际运行结果为准）。
 
 ### 必须说明仍有限制
 

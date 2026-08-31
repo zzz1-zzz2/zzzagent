@@ -5,7 +5,7 @@
 > **由 zzz 开发** · GitHub：[zzz1-zzz2/zzzagent](https://github.com/zzz1-zzz2/zzzagent)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-309%20passed-2ea44f)](#测试与验收)
+[![Tests](https://img.shields.io/badge/tests-313%20passed-2ea44f)](#测试与验收)
 [![Status](https://img.shields.io/badge/status-development-orange)](#当前范围)
 
 TraceForce 是由 **zzz** 开发的、可以实际读取项目、修改文件、执行检查并根据结果继续修复的 Coding Agent。它不是只返回建议的聊天窗口，也不依赖现成 Agent 编排框架或 Agent SDK；模型适配、工具调用循环、上下文视图、Session、权限和产品交互都在本仓库中实现。
@@ -221,10 +221,13 @@ TUI 提供：
 - 可选中复制的对话和工具详情；
 - 可折叠、可复制、可关闭的工具卡片；
 - Allow/Deny 异步权限弹窗；
+- 任务输入支持终端多行粘贴，换行会合并为空格，粘贴后按 Enter 发送；
+- `Copy output` / `Save output` 按钮，以及 `/copy` / `/export` 命令；
+- 模型错误的简洁提示和本地诊断文件 `.traceforce/tui-error.txt`；
 - `/help`、`/session`、`/sessions`、`/clear`、`/mcp`、`/exit`；
 - Ctrl+C 取消当前任务，Ctrl+Shift+C 复制选区，Ctrl+L 清除可见日志，Ctrl+Q 退出。
 
-已完成的工具卡片默认折叠；关闭只影响可见 UI，不取消底层工具调用。剪贴板能力取决于终端的 OSC52 支持。
+已完成的工具卡片默认折叠；关闭只影响可见 UI，不取消底层工具调用。剪贴板复制能力取决于终端 OSC52 支持；任务粘贴能力取决于终端是否发送 bracketed paste 事件。
 
 ---
 
@@ -351,8 +354,8 @@ done
 
 - `traceforce-llm`：36 项；
 - `traceforce-runtime`：228 项；
-- `traceforce`：45 项；
-- 合计：309 项。
+- `traceforce`：49 项；
+- 合计：313 项。
 
 测试使用 FakeLLM、Fake SDK、本地假 MCP server 和临时 workspace，不需要网络或真实 API key。测试覆盖 Provider 归一化、流式 tool-call 聚合、Agent loop、Tool Schema、错误反馈、Hook、Session、Context、扩展、文件工具、MCP、CLI 和 TUI。
 

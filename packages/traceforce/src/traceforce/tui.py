@@ -7,6 +7,7 @@ import contextlib
 import inspect
 import json
 import time
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from typing import Any
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.events import Paste
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Button, Collapsible, Footer, Header, Input, Label, Static, TextArea
@@ -45,6 +47,18 @@ from traceforce.identity import (
     TAGLINE,
     WORKFLOW,
 )
+
+
+class TaskInput(Input):
+    """将终端多行粘贴内容安全合并为一条任务输入。"""
+
+    def _on_paste(self, event: Paste) -> None:
+        text = event.text.replace("\r\n", "\n").replace("\r", "\n")
+        text = text.replace("\n", " ")
+        if text:
+            self.insert_text_at_cursor(text)
+        event.prevent_default()
+        event.stop()
 
 
 class ToolCard(Collapsible):
@@ -178,6 +192,11 @@ class ConversationLog(TextArea):
         """结束当前 assistant 消息，等待下一轮或下一条消息。"""
         self._finish_assistant()
 
+    @property
+    def transcript(self) -> str:
+        """返回当前可见对话，供复制和导出使用。"""
+        return self._transcript
+
     def clear_transcript(self) -> None:
         """清除所有消息并重置增量状态。"""
         self._transcript = ""
@@ -284,6 +303,14 @@ class TraceForceApp(App[None]):
         width: 1fr;
         height: 1fr;
         padding: 0 1;
+    }
+    .transcript-actions {
+        height: auto;
+        align: right middle;
+        padding: 0 1;
+    }
+    .transcript-actions Button {
+        margin-left: 1;
     }
     #side {
         width: 32;
@@ -432,9 +459,14 @@ class TraceForceApp(App[None]):
         with Horizontal(id="body"):
             with Vertical(id="main"):
                 yield ConversationLog(id="conversation")
+                yield Horizontal(
+                    Button("Copy output", id="copy-transcript"),
+                    Button("Save output", id="save-transcript"),
+                    classes="transcript-actions",
+                )
                 yield Vertical(id="cards")
                 yield Label("idle", id="status")
-                yield Input(
+                yield TaskInput(
                     placeholder="Describe a coding task…  (Ctrl+C cancels running task)",
                     id="prompt",
                 )
@@ -465,7 +497,7 @@ class TraceForceApp(App[None]):
             "Ctrl+Q  quit\n\n"
             "commands\n"
             "/help  /session  /sessions\n"
-            "/clear  /mcp  /exit"
+            "/clear  /copy /export /mcp /exit"
         )
 
     def _submit_text(self, text: str) -> None:
@@ -497,7 +529,7 @@ class TraceForceApp(App[None]):
             self.agent.agent.abort()
             self._set_status("cancelled")
         except Exception as exc:
-            self._write_system(f"[error] {exc}")
+            self._record_error(exc)
             self._set_status("error")
         else:
             if self._status_text == "running":
@@ -523,6 +555,8 @@ class TraceForceApp(App[None]):
                     "/session [new|ID]  show, create, or restore a session\n"
                     "/sessions  list saved sessions\n"
                     "/clear  reset the current session and visible log\n"
+                    "/copy  copy the complete visible conversation\n"
+                    "/export  save the conversation under .traceforce/\n"
                     "/mcp  show connected MCP servers\n"
                     "/exit  quit TraceForce"
                 )
@@ -550,6 +584,10 @@ class TraceForceApp(App[None]):
                 self.agent.agent.reset()
                 self._clear_view()
                 self._write_system("current session cleared")
+            elif command == "copy":
+                self._copy_transcript()
+            elif command in {"export", "save"}:
+                self._save_transcript()
             elif command == "mcp":
                 await self.agent.agent.ensure_initialized()
                 result = self.agent.agent.extension_manager.handle_command("mcp")
@@ -565,7 +603,7 @@ class TraceForceApp(App[None]):
                     result = await result
                 self._write_system(str(result) if result is not None else "command complete")
         except (RuntimeError, ValueError) as exc:
-            self._write_system(f"[error] {exc}")
+            self._record_error(exc)
             self._set_status("error")
         finally:
             self._command_task = None
@@ -635,6 +673,56 @@ class TraceForceApp(App[None]):
         self.query_one("#conversation", ConversationLog).append_block(
             "SYSTEM", text, classes="system"
         )
+
+    def _record_error(self, exc: Exception) -> None:
+        """在界面展示可复制错误，并把诊断保存到本地忽略目录。"""
+        message = f"{type(exc).__name__}: {exc}"
+        path = self._error_path()
+        self._write_system(
+            f"[error] {message}\n"
+            f"完整错误已保存到 {path}；可使用 Copy output 或 /export。"
+        )
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                f"{message}\n\n{traceback.format_exc()}",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def _error_path(self) -> Path:
+        return self.workspace / ".traceforce" / "tui-error.txt"
+
+    def _copy_transcript(self) -> None:
+        transcript = self.query_one("#conversation", ConversationLog).transcript
+        if transcript:
+            self.copy_to_clipboard(transcript)
+            self._set_status("copied output")
+        else:
+            self._set_status("no output to copy")
+
+    def _save_transcript(self) -> Path | None:
+        transcript = self.query_one("#conversation", ConversationLog).transcript
+        if not transcript:
+            self._set_status("no output to save")
+            return None
+        path = self.workspace / ".traceforce" / "tui-transcript.txt"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(transcript + "\n", encoding="utf-8")
+        except OSError as exc:
+            self._record_error(exc)
+            return None
+        self._write_system(f"output saved to {path}")
+        self._set_status("output saved")
+        return path
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "copy-transcript":
+            self._copy_transcript()
+        elif event.button.id == "save-transcript":
+            self._save_transcript()
 
     def _set_status(self, text: str) -> None:
         self._status_text = text
