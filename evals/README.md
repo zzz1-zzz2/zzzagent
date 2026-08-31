@@ -7,20 +7,29 @@
 每个任务都遵循同一条边界：
 
 ```text
-Prepare → Baseline → Run Agent → Verify → Collect Evidence → Reset
+Prepare → Initial verification → Run TraceForce → Final verification → Collect Evidence → Reset
 ```
 
 1. **Prepare（准备）** — 从仓库根目录运行任务的 `setup.sh`。脚本会在 `evals/workspaces/<task-name>` 下创建或恢复干净的 workspace。
-2. **Baseline（基线）** — 准备完成后立即运行 `verify.sh`。Bugfix 任务在 Agent 运行前必须失败；Greenfield 任务则应报告预期交付物尚不存在。
-3. **Run Agent（运行 Agent）** — 只把生成的 workspace 交给 TraceForce。不要把任务目录或当前仓库根目录作为 Agent 的 workspace。
+2. **Initial verification（TraceForce 介入前的初始状态检查）** — 准备完成后立即运行 `verify.sh`，记录 TraceForce 开始工作前的状态。Bugfix 任务应证明问题仍存在并失败；Greenfield 任务应报告 workspace 为空或交付物尚不存在。
+3. **Run TraceForce（运行 TraceForce）** — 只把生成的 workspace 交给 TraceForce。不要把任务目录或当前仓库根目录作为 TraceForce 的 workspace。
 4. **Verify（验证）** — Agent 完成后再次运行任务的 `verify.sh`。该脚本是独立裁判，只有全部验收条件满足时才返回退出码 0。
 5. **Collect Evidence（收集证据）** — 可以选择将脱敏后的 Session 总结、`git diff`/patch、测试输出、截图或短视频保存到 `evals/results/<task-name>/`。证据中绝不能保存 API key 或其他凭据。
-6. **Reset（重置）** — 开始下一次尝试前重新运行 `setup.sh`。脚本会删除上一次生成的 workspace，并重新创建固定 revision 的基线。
+6. **Reset（重置）** — 在开始下一次尝试前重新运行 `setup.sh`，恢复固定 revision 或空 workspace 的初始状态。
 
 当前有意不实现 `evals/run.py`。setup 和 verify 脚本保持小而可审计，让 Agent 本身，而不是第二套 benchmark framework，继续作为被测系统。
 
-## 任务列表
+## Before TraceForce / After TraceForce
 
+这里的“初始状态检查”不是和其他 Agent 或模型比较的 benchmark baseline，而是确认同一个任务在 TraceForce 介入前后的状态变化：
+
+| 任务 | Before TraceForce | After TraceForce |
+| --- | --- | --- |
+| 任务 01 tqdm | buggy revision；目标行为检查失败 | 目标行为恢复；独立 verifier 通过 |
+| 任务 02 Sanic | middleware 顺序错误；独立检查失败 | middleware 顺序正确；独立 verifier 通过 |
+| 任务 03 DevBoard | 空 workspace；`package.json` 不存在 | React + Vite 项目生成；production build 通过，另做人工 UI 验收 |
+
+因此评测要证明的是同一个任务的 `Initial state → TraceForce → Final state`，不包含第二个 Agent，也不要求排行榜式的竞品对照。
 | 任务 | 覆盖内容 | Workspace | 独立验证 |
 | --- | --- | --- | --- |
 | [01 — tqdm bugfix](tasks/01-tqdm-bugfix/) | 现有 Python 仓库中的简单 API 回归修复 | `evals/workspaces/01-tqdm-bugfix/` | 定向 pytest 与独立行为断言 |
@@ -35,7 +44,7 @@ Prepare → Baseline → Run Agent → Verify → Collect Evidence → Reset
 
 ```bash
 evals/tasks/01-tqdm-bugfix/setup.sh
-evals/tasks/01-tqdm-bugfix/verify.sh  # 基线阶段预期失败
+evals/tasks/01-tqdm-bugfix/verify.sh  # 初始状态检查，预期失败
 
 uv run --project packages/traceforce traceforce \
   --workspace "$PWD/evals/workspaces/01-tqdm-bugfix" \
