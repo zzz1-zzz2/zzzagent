@@ -92,6 +92,8 @@ TraceForce 由三个独立 Python 包组成：
 └────────────────────────────────────────────────────────────┘
 ```
 
+`evals/` 是独立的验收层，不参与产品运行时：它只保存任务定义、workspace 准备脚本、独立验证脚本和可选结果证据。评测按 `Prepare → Baseline → Run Agent → Verify → Collect Evidence → Reset` 执行，运行时 workspace 和结果默认被 Git 忽略。详见 [evals/README.md](evals/README.md)。
+
 ### `traceforce-llm`
 
 模型边界层，负责：

@@ -8,7 +8,7 @@ TraceForce 是由 zzz 独立开发的、面向真实软件工程任务的 Coding
 
 它的核心目标是让模型真正参与软件工程工作：读取项目 -> 分析问题 -> 修改文件 -> 运行验证 -> 根据结果修复 -> 汇报证据。
 
-实现由三个独立 Python 包组成：traceforce-llm 负责 OpenAI、DeepSeek、Anthropic 及 OpenAI 兼容网关的统一模型接口；traceforce-runtime 负责 Agent 循环、工具注册、上下文、事件和 JSONL Session；traceforce 负责 Coding Agent、CLI 和 workspace 工具。
+实现由三个独立 Python 包组成：traceforce-llm 负责 OpenAI、DeepSeek、Anthropic 及 OpenAI 兼容网关的统一模型接口；traceforce-runtime 负责 Agent 循环、工具注册、上下文、事件和 JSONL Session；traceforce 负责 Coding Agent、CLI 和 workspace 工具。evals/ 是独立验收层，只负责任务定义、workspace 准备、独立 verify 和可选证据，不复制 Agent loop；评测流程为 Prepare -> Baseline -> Run Agent -> Verify -> Collect Evidence -> Reset。
 
 安装
 ----

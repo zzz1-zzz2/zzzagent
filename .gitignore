@@ -20,3 +20,8 @@ dist/
 # 本地私有项目说明
 CLAUDE.md
 AGENTS.md
+
+# Evaluation workspaces and collected evidence
+# Keep the directories themselves available as documented runtime locations.
+evals/workspaces/*
+evals/results/*
